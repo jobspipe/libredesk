@@ -17,6 +17,8 @@ import (
 	"github.com/zerodha/fastglue"
 )
 
+const maxDeliveryURLFilterLength = 512
+
 type campaignEventRequest struct {
 	DeliveryID string `json:"delivery_id"`
 	BrowserKey string `json:"browser_key"`
@@ -169,6 +171,57 @@ func handleCampaignStats(r *fastglue.Request) error {
 		return sendErrorEnvelope(r, err)
 	}
 	return r.SendEnvelope(stats)
+}
+
+// handleCampaignDeliveries lists the proactive messages sent in an inbox over a date range, newest first: what was shown, on which page, to whom, and what they did with it.
+func handleCampaignDeliveries(r *fastglue.Request) error {
+	app := r.Context.(*App)
+	id, err := strconv.Atoi(r.RequestCtx.UserValue("id").(string))
+	if err != nil || id <= 0 {
+		return sendErrorEnvelope(r, campaignInputError(app))
+	}
+	loc, err := time.LoadLocation(app.setting.GetAppTimezone())
+	if err != nil {
+		return sendErrorEnvelope(r, campaignInputError(app))
+	}
+	args := r.RequestCtx.QueryArgs()
+	from, err := time.ParseInLocation(time.DateOnly, string(args.Peek("from")), loc)
+	if err != nil {
+		return sendErrorEnvelope(r, campaignInputError(app))
+	}
+	to, err := time.ParseInLocation(time.DateOnly, string(args.Peek("to")), loc)
+	if err != nil || to.Before(from) {
+		return sendErrorEnvelope(r, campaignInputError(app))
+	}
+	filter, err := parseDeliveryFilter(string(args.Peek("campaign_id")), string(args.Peek("state")), string(args.Peek("url")))
+	if err != nil {
+		return sendErrorEnvelope(r, campaignInputError(app))
+	}
+	page, pageSize := getPagination(r)
+	deliveries, total, err := app.proactive.Deliveries(id, from, to.AddDate(0, 0, 1), filter, page, pageSize)
+	if err != nil {
+		return sendErrorEnvelope(r, err)
+	}
+	return r.SendEnvelope(envelope.PageResults{
+		Results:    deliveries,
+		Total:      total,
+		PerPage:    pageSize,
+		TotalPages: (total + pageSize - 1) / pageSize,
+		Page:       page,
+	})
+}
+
+func parseDeliveryFilter(campaignID, state, url string) (proactive.DeliveryFilter, error) {
+	if campaignID != "" && !validCampaignKey(campaignID) {
+		return proactive.DeliveryFilter{}, errors.New("campaign id")
+	}
+	if state != "" && !slices.Contains(proactive.DeliveryStates, state) {
+		return proactive.DeliveryFilter{}, errors.New("state")
+	}
+	if len(url) > maxDeliveryURLFilterLength {
+		return proactive.DeliveryFilter{}, errors.New("url")
+	}
+	return proactive.DeliveryFilter{CampaignID: campaignID, State: state, URL: url}, nil
 }
 
 func campaignWithinHours(app *App, c proactive.Campaign, now time.Time, loc *time.Location) (bool, error) {

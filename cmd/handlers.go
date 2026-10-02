@@ -189,6 +189,7 @@ func initHandlers(g *fastglue.Fastglue, hub *ws.Hub) {
 	// Inboxes.
 	g.GET("/api/v1/inboxes", auth(handleGetInboxes))
 	g.GET("/api/v1/inboxes/{id}/campaign-stats", perm(handleCampaignStats, "inboxes:manage"))
+	g.GET("/api/v1/inboxes/{id}/campaign-deliveries", perm(handleCampaignDeliveries, "inboxes:manage"))
 	g.GET("/api/v1/inboxes/{id}", perm(handleGetInbox, "inboxes:manage"))
 	g.POST("/api/v1/inboxes", perm(handleCreateInbox, "inboxes:manage"))
 	g.PUT("/api/v1/inboxes/{id}/toggle", perm(handleToggleInbox, "inboxes:manage"))

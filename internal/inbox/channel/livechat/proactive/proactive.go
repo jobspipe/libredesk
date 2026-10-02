@@ -6,6 +6,7 @@ import (
 	"embed"
 	"encoding/json"
 	"errors"
+	"net/url"
 	"sync"
 	"time"
 
@@ -20,6 +21,8 @@ var (
 	//go:embed queries.sql
 	efs embed.FS
 )
+
+const maxDeliveryURLLength = 2048
 
 type Manager struct {
 	q    queries
@@ -41,6 +44,7 @@ type queries struct {
 	RecordEvent *sqlx.Stmt `query:"record-event"`
 	BindContact *sqlx.Stmt `query:"bind-contact"`
 	Stats       *sqlx.Stmt `query:"stats"`
+	Deliveries  *sqlx.Stmt `query:"deliveries"`
 }
 
 func New(opts Opts) (*Manager, error) {
@@ -75,7 +79,7 @@ func (m *Manager) Reserve(inboxID int, campaign Campaign, ctx Context, snapshot 
 		return Delivery{}, m.error(err)
 	}
 	delivery := Delivery{CampaignID: campaign.ID, Snapshot: raw}
-	if err := m.q.Reserve.Get(&delivery.ID, campaign.ID, inboxID, ctx.BrowserKey, ctx.SessionKey, ctx.ContactID, raw); err != nil {
+	if err := m.q.Reserve.Get(&delivery.ID, campaign.ID, inboxID, ctx.BrowserKey, ctx.SessionKey, ctx.ContactID, raw, deliveryURL(ctx.URL), ctx.Mobile); err != nil {
 		return Delivery{}, m.error(err)
 	}
 	return delivery, nil
@@ -105,6 +109,32 @@ func (m *Manager) Stats(inboxID int, from, to time.Time) ([]Stats, error) {
 		return nil, m.error(err)
 	}
 	return out, nil
+}
+
+// Deliveries returns one page of the proactive messages sent in an inbox, newest first, with the total that match.
+func (m *Manager) Deliveries(inboxID int, from, to time.Time, filter DeliveryFilter, page, pageSize int) ([]DeliveryRecord, int, error) {
+	out := make([]DeliveryRecord, 0)
+	if err := m.q.Deliveries.Select(&out, inboxID, from, to, filter.CampaignID, filter.State, filter.URL, pageSize, (page-1)*pageSize); err != nil {
+		return nil, 0, m.error(err)
+	}
+	if len(out) == 0 {
+		return out, 0, nil
+	}
+	return out, out[0].Total, nil
+}
+
+// deliveryURL keeps the page a message was shown on without its query string or fragment, which can carry tokens.
+func deliveryURL(raw string) string {
+	u, err := url.Parse(raw)
+	if err != nil || u.Host == "" {
+		return ""
+	}
+	u.RawQuery, u.Fragment, u.User = "", "", nil
+	out := u.String()
+	if len(out) > maxDeliveryURLLength {
+		return out[:maxDeliveryURLLength]
+	}
+	return out
 }
 
 func (m *Manager) error(err error) error {

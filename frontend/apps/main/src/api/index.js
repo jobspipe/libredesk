@@ -658,9 +658,11 @@ const createPushSubscription = (data) => http.post('/api/v1/notifications/push-s
 const deletePushSubscription = (endpoint) => http.delete('/api/v1/notifications/push-subscriptions', { data: { endpoint } })
 
 const getCampaignStats = (id, params) => http.get(`/api/v1/inboxes/${id}/campaign-stats`, { params })
+const getCampaignDeliveries = (id, params) => http.get(`/api/v1/inboxes/${id}/campaign-deliveries`, { params })
 
 export default {
  getCampaignStats,
+ getCampaignDeliveries,
   login,
   deleteUser,
   importAgents,

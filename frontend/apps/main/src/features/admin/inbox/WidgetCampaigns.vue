@@ -47,6 +47,7 @@ import SwitchField from '@shared-ui/components/SwitchField.vue'
 import SelectAgentCombobox from '@/components/combobox/SelectAgentCombobox.vue'
 import SelectTeamCombobox from '@/components/combobox/SelectTeamCombobox.vue'
 import WidgetConditions from './WidgetConditions.vue'
+import WidgetCampaignHistory from './WidgetCampaignHistory.vue'
 import { createCampaignSchema, defaultCampaign, newCampaignId } from './livechatFormSchema.js'
 import { handleHTTPError } from '@shared-ui/utils/http'
 import { isGoDuration } from '@shared-ui/utils/string'
@@ -455,6 +456,9 @@ onMounted(async () => {
           </Table>
         </CollapsibleContent>
       </Collapsible>
+
+      <!-- Send history -->
+      <WidgetCampaignHistory :inbox-id="inboxId" :campaigns="modelValue" />
     </template>
 
     <!-- Campaign editor -->

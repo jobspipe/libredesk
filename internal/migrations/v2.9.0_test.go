@@ -192,8 +192,33 @@ func TestWidgetCampaignMigration(t *testing.T) {
 	if err := db.Get(&count, `SELECT COUNT(*) FROM pg_indexes WHERE tablename = 'widget_campaign_deliveries'`); err != nil {
 		t.Fatal(err)
 	}
-	if count != 4 {
-		t.Fatalf("expected primary key and three indexes, got %d", count)
+	if count != 5 {
+		t.Fatalf("expected primary key and four indexes, got %d", count)
+	}
+	var columns int
+	if err := db.Get(&columns, `SELECT COUNT(*) FROM information_schema.columns WHERE table_name = 'widget_campaign_deliveries' AND column_name IN ('url', 'mobile') AND is_nullable = 'NO'`); err != nil {
+		t.Fatal(err)
+	}
+	if columns != 2 {
+		t.Fatalf("expected the page and device columns the send history reads, got %d", columns)
+	}
+}
+
+func TestWidgetCampaignMigrationAddsHistoryColumnsToAnExistingTable(t *testing.T) {
+	db := testutil.NewDB(t, "widget_migration_existing")
+	db.MustExec(`ALTER TABLE widget_campaign_deliveries DROP COLUMN url, DROP COLUMN mobile`)
+	db.MustExec(`DROP INDEX idx_widget_campaign_history`)
+	db.MustExec(`INSERT INTO inboxes(name,channel) VALUES ('Chat','livechat')`)
+	db.MustExec(`INSERT INTO widget_campaign_deliveries(campaign_id, inbox_id, browser_key, session_key, snapshot) VALUES (gen_random_uuid(), 1, gen_random_uuid(), gen_random_uuid(), '{}')`)
+	if err := V2_9_0(db, nil, nil); err != nil {
+		t.Fatal(err)
+	}
+	var kept bool
+	if err := db.Get(&kept, `SELECT url = '' AND NOT mobile FROM widget_campaign_deliveries`); err != nil {
+		t.Fatal(err)
+	}
+	if !kept {
+		t.Fatal("a send recorded before the upgrade lost its row or got a wrong default")
 	}
 }
 

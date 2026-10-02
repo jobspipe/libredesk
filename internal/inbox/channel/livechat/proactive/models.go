@@ -71,3 +71,34 @@ type Stats struct {
 	Dismissed  int    `db:"dismissed" json:"dismissed"`
 	Replied    int    `db:"replied" json:"replied"`
 }
+
+// DeliveryFilter narrows the list of sent proactive messages; zero values match everything.
+type DeliveryFilter struct {
+	CampaignID string
+	State      string
+	URL        string
+}
+
+// DeliveryStates are the values DeliveryFilter.State accepts besides empty.
+var DeliveryStates = []string{"displayed", "undisplayed", "opened", "dismissed", "replied"}
+
+// DeliveryRecord is one proactive message sent to one visitor, as agents see it in the send history.
+type DeliveryRecord struct {
+	ID               string    `db:"id" json:"id"`
+	CampaignID       string    `db:"campaign_id" json:"campaign_id"`
+	CreatedAt        time.Time `db:"created_at" json:"created_at"`
+	URL              string    `db:"url" json:"url"`
+	Mobile           bool      `db:"mobile" json:"mobile"`
+	Message          string    `db:"message" json:"message"`
+	Sender           string    `db:"sender" json:"sender"`
+	Displayed        bool      `db:"displayed" json:"displayed"`
+	Opened           bool      `db:"opened" json:"opened"`
+	Dismissed        bool      `db:"dismissed" json:"dismissed"`
+	Replied          bool      `db:"replied" json:"replied"`
+	ConversationUUID string    `db:"conversation_uuid" json:"conversation_uuid"`
+	ContactID        int       `db:"contact_id" json:"contact_id"`
+	ContactType      string    `db:"contact_type" json:"contact_type"`
+	ContactName      string    `db:"contact_name" json:"contact_name"`
+	ContactEmail     string    `db:"contact_email" json:"contact_email"`
+	Total            int       `db:"total" json:"-"`
+}

@@ -354,6 +354,9 @@ CREATE TABLE IF NOT EXISTS widget_campaign_deliveries (
 CREATE INDEX IF NOT EXISTS idx_widget_campaign_browser ON widget_campaign_deliveries(inbox_id, browser_key, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_widget_campaign_contact ON widget_campaign_deliveries(inbox_id, contact_id, created_at DESC) WHERE contact_id IS NOT NULL;
 CREATE INDEX IF NOT EXISTS idx_widget_campaign_stats ON widget_campaign_deliveries(inbox_id, campaign_id, created_at);
+ALTER TABLE widget_campaign_deliveries ADD COLUMN IF NOT EXISTS url TEXT NOT NULL DEFAULT '';
+ALTER TABLE widget_campaign_deliveries ADD COLUMN IF NOT EXISTS mobile BOOLEAN NOT NULL DEFAULT FALSE;
+CREATE INDEX IF NOT EXISTS idx_widget_campaign_history ON widget_campaign_deliveries(inbox_id, created_at DESC);
 
 ALTER TABLE help_centers ADD COLUMN IF NOT EXISTS livechat_inbox_id INTEGER NULL REFERENCES inboxes(id) ON DELETE SET NULL;
 

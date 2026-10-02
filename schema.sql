@@ -1064,8 +1064,11 @@ CREATE TABLE widget_campaign_deliveries (
     opened BOOLEAN NOT NULL DEFAULT FALSE,
     dismissed BOOLEAN NOT NULL DEFAULT FALSE,
     replied BOOLEAN NOT NULL DEFAULT FALSE,
-    conversation_uuid UUID REFERENCES conversations(uuid) ON DELETE SET NULL
+    conversation_uuid UUID REFERENCES conversations(uuid) ON DELETE SET NULL,
+    url TEXT NOT NULL DEFAULT '',
+    mobile BOOLEAN NOT NULL DEFAULT FALSE
 );
+CREATE INDEX idx_widget_campaign_history ON widget_campaign_deliveries(inbox_id, created_at DESC);
 CREATE INDEX idx_widget_campaign_browser ON widget_campaign_deliveries(inbox_id, browser_key, created_at DESC);
 CREATE INDEX idx_widget_campaign_contact ON widget_campaign_deliveries(inbox_id, contact_id, created_at DESC) WHERE contact_id IS NOT NULL;
 CREATE INDEX idx_widget_campaign_stats ON widget_campaign_deliveries(inbox_id, campaign_id, created_at);

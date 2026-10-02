@@ -168,7 +168,7 @@ onMounted(() => load())
               {{ deliveryPage(row.url) || '-' }}
             </TableCell>
             <TableCell class="max-w-80">
-              <div>{{ row.message }}</div>
+              <div class="whitespace-pre-line">{{ row.message }}</div>
               <div class="text-xs text-muted-foreground">{{ campaignName(row.campaign_id) }}</div>
             </TableCell>
             <TableCell class="whitespace-nowrap">

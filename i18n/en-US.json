@@ -1820,6 +1820,7 @@
   "widget.helpPlacement": "Where help appears",
   "widget.invitationExpired": "This invitation is no longer available. Start a new chat to contact us.",
   "widget.ipBlocked": "Access denied",
+  "widget.justNow": "Just now",
   "widget.newCampaign": "New proactive message",
   "widget.noArticles": "No published articles yet.",
   "widget.prechatForm.continueToHuman": "Continue to a human",

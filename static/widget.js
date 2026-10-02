@@ -649,6 +649,17 @@
             this.toggleButton.style.transform = `scale(${scale})`;
         }
 
+        // setCampaignBadge marks the launcher like one unread message while a proactive message is showing, and clears it after.
+        setCampaignBadge (showing) {
+            if (!this.unreadBadge || this.unreadCount > 0) return;
+            if (showing && !this.isChatVisible) {
+                this.unreadBadge.textContent = this.formatBadgeCount(1);
+                this.unreadBadge.style.display = 'flex';
+            } else {
+                this.unreadBadge.style.display = 'none';
+            }
+        }
+
         updateUnreadCount (count) {
             this.unreadCount = count;
             if (this._onUnreadCountChangeCallback) this._onUnreadCountChangeCallback(count);
@@ -747,13 +758,14 @@
                 const snapshot = invitation.snapshot;
                 data = { ...data, identity: 'campaign', previews: [{
                     key: invitation.id, campaign: true, name: snapshot.sender, avatar: snapshot.avatar,
-                    text: snapshot.message.slice(0, 240),
+                    text: snapshot.message.slice(0, 600),
                 }] };
             }
             if (!data || !this.widgetLoaded || this.isChatVisible || this.hideLauncher) {
                 this.previewHost?.remove();
                 this.previewHost = null;
                 this.previewSignature = '';
+                this.setCampaignBadge(false);
                 return;
             }
             const storageKey = `libredesk-previews-${this.config.inboxID}-${data.identity || 'visitor'}`;
@@ -761,6 +773,7 @@
             try { dismissed = JSON.parse(localStorage.getItem(storageKey) || '[]'); } catch {}
             const previews = data.previews.filter(item => !dismissed.includes(item.key)).slice(0, 3);
             const signature = JSON.stringify([previews, data.theme, data.labels]);
+            this.setCampaignBadge(previews.some(item => item.campaign));
             if (signature === this.previewSignature) return;
             this.previewSignature = signature;
             this.previewHost?.remove();
@@ -774,7 +787,7 @@
             host.style.setProperty('--muted', data.theme.muted || data.theme.foreground);
             const root = host.attachShadow({ mode: 'open' });
             const style = document.createElement('style');
-            style.textContent = ':host{font:14px/1.45 system-ui,-apple-system,sans-serif;-webkit-font-smoothing:antialiased}button{font:inherit;color:inherit;cursor:pointer;border:0;background:transparent;padding:0}button:focus-visible{outline:2px solid;outline-offset:2px}.stack{display:flex;flex-direction:column;gap:10px;align-items:var(--align)}.card{position:relative;display:flex;max-width:100%;border-radius:18px;box-shadow:0 1px 3px rgba(9,14,21,.12),0 8px 28px rgba(9,14,21,.16);animation:rise .22s ease-out}.open{display:flex;gap:10px;align-items:flex-start;min-width:0;padding:12px 14px;text-align:left;border-radius:inherit}.body{display:flex;flex-direction:column;min-width:0;gap:2px}.name{font-size:12px;line-height:1.3;color:var(--muted)}.text{display:-webkit-box;-webkit-line-clamp:4;-webkit-box-orient:vertical;overflow:hidden;overflow-wrap:anywhere;white-space:pre-line}.avatar{flex:none;width:32px;height:32px;border-radius:50%;object-fit:cover}.image{margin-top:6px;max-width:160px;max-height:96px;border-radius:10px;object-fit:cover}.close{position:absolute;top:-8px;inset-inline-end:-8px;width:24px;height:24px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:15px;line-height:1;color:var(--muted);box-shadow:0 1px 3px rgba(9,14,21,.18);opacity:0;transition:opacity .15s}.card:hover .close,.card:focus-within .close{opacity:1}@media(hover:none){.close{opacity:1}}.all{font-size:12px;color:var(--muted);padding:4px 6px;border-radius:6px}.all:hover{text-decoration:underline}@keyframes rise{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}@media(prefers-reduced-motion:reduce){.card{animation:none}}';
+            style.textContent = ':host{font:14px/1.45 system-ui,-apple-system,sans-serif;-webkit-font-smoothing:antialiased}button{font:inherit;color:inherit;cursor:pointer;border:0;background:transparent;padding:0}button:focus-visible{outline:2px solid;outline-offset:2px}.stack{display:flex;flex-direction:column;gap:10px;align-items:var(--align)}.card{position:relative;display:flex;max-width:100%;border-radius:18px;box-shadow:0 1px 3px rgba(9,14,21,.12),0 8px 28px rgba(9,14,21,.16);animation:rise .22s ease-out}.open{display:flex;gap:10px;align-items:flex-start;min-width:0;padding:12px 14px;text-align:left;border-radius:inherit}.body{display:flex;flex-direction:column;min-width:0;gap:2px}.name{font-size:12px;line-height:1.3;color:var(--muted)}.text{display:-webkit-box;-webkit-line-clamp:4;-webkit-box-orient:vertical;overflow:hidden;overflow-wrap:anywhere;white-space:pre-line}.text.full{-webkit-line-clamp:12}.meta{font-size:12px;line-height:1.3;color:var(--muted);margin-top:6px}.avatar{flex:none;width:36px;height:36px;border-radius:50%;object-fit:cover}.image{margin-top:6px;max-width:160px;max-height:96px;border-radius:10px;object-fit:cover}.close{position:absolute;top:-8px;inset-inline-end:-8px;width:24px;height:24px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:15px;line-height:1;color:var(--muted);box-shadow:0 1px 3px rgba(9,14,21,.18);opacity:0;transition:opacity .15s}.card:hover .close,.card:focus-within .close{opacity:1}@media(hover:none){.close{opacity:1}}.all{font-size:12px;color:var(--muted);padding:4px 6px;border-radius:6px}.all:hover{text-decoration:underline}@keyframes rise{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}@media(prefers-reduced-motion:reduce){.card{animation:none}}';
             root.append(style);
             const stack = document.createElement('div');
             stack.className = 'stack';
@@ -819,7 +832,14 @@
                 const content = document.createElement('span');
                 content.className = 'text';
                 content.textContent = item.text;
-                body.append(name, content);
+                if (item.campaign) {
+                    // A proactive message reads as a message just received: its full text, then who sent it and when.
+                    content.classList.add('full');
+                    const meta = document.createElement('span');
+                    meta.className = 'meta';
+                    meta.textContent = [item.name, data.labels.justNow || 'Just now'].filter(Boolean).join(' \u2022 ');
+                    body.append(content, meta);
+                } else body.append(name, content);
                 const image = safeImage(item.image, 'image');
                 if (image) body.append(image);
                 open.append(body);

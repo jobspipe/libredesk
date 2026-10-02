@@ -58,6 +58,7 @@ export function useReplyPreviews() {
           labels: {
             dismiss: t('globals.terms.dismiss'),
             dismissAll: t('widget.dismissPreviews'),
+            justNow: t('widget.justNow'),
             open: t('globals.messages.openConversation')
           },
           theme: {

@@ -142,10 +142,18 @@ func (m *Manager) error(err error) error {
 	return envelope.NewError(envelope.GeneralError, m.i18n.T("globals.messages.somethingWentWrong"), nil)
 }
 
+// RepeatVisitor suppresses a campaign for a browser (or identified contact) that has already
+// received any proactive message from this inbox, so a visitor is messaged once in total.
+const RepeatVisitor = "visitor"
+
 func Suppression(c Campaign, ctx Context, history []Delivery, cooldown time.Duration) string {
 	for _, d := range history {
 		if !d.Displayed && !d.Dismissed && !d.Replied && ctx.Now.Sub(d.CreatedAt) > time.Minute {
 			continue
+		}
+		// "visitor": one proactive message per person, whichever campaign sent it.
+		if c.Repeat == RepeatVisitor {
+			return "repeat"
 		}
 		if d.CampaignID == c.ID {
 			if d.Replied || c.Repeat == "once" || c.Repeat == "session" && d.SessionKey == ctx.SessionKey || c.Repeat == "interval" && ctx.Now.Sub(d.CreatedAt) < time.Duration(c.RepeatHours)*time.Hour {

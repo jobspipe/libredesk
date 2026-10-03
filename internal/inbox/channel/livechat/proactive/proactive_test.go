@@ -194,3 +194,28 @@ func TestDeliveriesListsEverySendNewestFirst(t *testing.T) {
 		t.Fatalf("range filter: total=%d rows=%+v err=%v", total, rows, err)
 	}
 }
+
+func TestSuppressionVisitorRepeatCountsEveryCampaign(t *testing.T) {
+	now := time.Now()
+	ctx := Context{BrowserKey: uuid.NewString(), SessionKey: uuid.NewString(), Now: now}
+	pricing := Campaign{ID: uuid.NewString(), Repeat: RepeatVisitor}
+	blog := Campaign{ID: uuid.NewString(), Repeat: RepeatVisitor}
+	perCampaign := Campaign{ID: uuid.NewString(), Repeat: "once"}
+
+	if got := Suppression(blog, ctx, nil, 0); got != "" {
+		t.Fatalf("fresh visitor suppressed: %q", got)
+	}
+
+	shownPricing := []Delivery{{CampaignID: pricing.ID, SessionKey: ctx.SessionKey, CreatedAt: now.Add(-2 * time.Hour), Displayed: true}}
+	if got := Suppression(blog, ctx, shownPricing, 0); got != "repeat" {
+		t.Fatalf("second campaign reached a visitor who already had one: %q", got)
+	}
+	if got := Suppression(perCampaign, ctx, shownPricing, 0); got != "" {
+		t.Fatalf("a per-campaign repeat was suppressed by another campaign's send: %q", got)
+	}
+
+	neverShown := []Delivery{{CampaignID: pricing.ID, SessionKey: ctx.SessionKey, CreatedAt: now.Add(-2 * time.Hour)}}
+	if got := Suppression(blog, ctx, neverShown, 0); got != "" {
+		t.Fatalf("a reservation that was never displayed counted as a send: %q", got)
+	}
+}

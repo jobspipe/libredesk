@@ -727,7 +727,7 @@ onMounted(async () => {
               <SelectTrigger id="campaign-repeat"><SelectValue /></SelectTrigger>
               <SelectContent>
                 <SelectItem
-                  v-for="value in ['once', 'session', 'interval']"
+                  v-for="value in ['visitor', 'once', 'session', 'interval']"
                   :key="value"
                   :value="value"
                 >

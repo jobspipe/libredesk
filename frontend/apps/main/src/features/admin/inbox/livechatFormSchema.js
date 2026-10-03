@@ -211,7 +211,7 @@ export const createCampaignSchema = (t) =>
       business_hours: z.enum(['any', 'inside', 'outside']),
       desktop: z.boolean(),
       mobile: z.boolean(),
-      repeat: z.enum(['once', 'session', 'interval']),
+      repeat: z.enum(['visitor', 'once', 'session', 'interval']),
       repeat_hours: rangeInteger(t, 1, 8760)
     })
     .superRefine((campaign, ctx) => {

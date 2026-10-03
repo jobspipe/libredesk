@@ -280,6 +280,19 @@ describe('Livechat Inbox Form Schema', () => {
     ])
   })
 
+  test.each(['visitor', 'once', 'session', 'interval'])('campaign repeat accepts %s', (repeat) => {
+    expect(() =>
+      schema.parse(withConfig({ campaigns: [{ ...validCampaign, repeat }] }))
+    ).not.toThrow()
+  })
+
+  test('campaign repeat rejects a value the server does not know', () => {
+    const result = schema.safeParse(
+      withConfig({ campaigns: [{ ...validCampaign, repeat: 'daily' }] })
+    )
+    expect(result.success).toBe(false)
+  })
+
   test.each(['0s', '10m', '1h', '1h30m'])(
     'campaign cooldown accepts %s',
     (campaignCooldown) => {

@@ -26,7 +26,7 @@ func (c Campaign) Validate() error {
 	if !slices.Contains([]string{"all", "visitors", "users"}, c.Audience) {
 		return fmt.Errorf("audience")
 	}
-	if !slices.Contains([]string{"once", "session", "interval"}, c.Repeat) {
+	if !slices.Contains(Repeats, c.Repeat) {
 		return fmt.Errorf("repeat")
 	}
 	if !slices.Contains([]string{"any", "inside", "outside"}, c.BusinessHours) {

@@ -155,3 +155,25 @@ func TestMatchesURLHostOnlyPattern(t *testing.T) {
 		}
 	}
 }
+
+func TestCampaignValidateAcceptsEveryRepeatTheAdminOffers(t *testing.T) {
+	for _, repeat := range []string{RepeatVisitor, "once", "session", "interval"} {
+		campaign := Campaign{
+			ID:            "8a3660e6-e29b-461c-924f-314c7576f75a",
+			Name:          "Pricing invitation",
+			Message:       "Need help choosing a plan?",
+			Audience:      "all",
+			BusinessHours: "any",
+			Desktop:       true,
+			Repeat:        repeat,
+			RepeatHours:   24,
+		}
+		if err := campaign.Validate(); err != nil {
+			t.Fatalf("repeat %q rejected: %v", repeat, err)
+		}
+	}
+	campaign := Campaign{ID: "8a3660e6-e29b-461c-924f-314c7576f75a", Name: "n", Message: "m", Audience: "all", BusinessHours: "any", Desktop: true, Repeat: "daily", RepeatHours: 24}
+	if err := campaign.Validate(); err == nil || err.Error() != "repeat" {
+		t.Fatalf("got %v, want repeat validation error", err)
+	}
+}

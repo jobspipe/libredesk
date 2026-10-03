@@ -146,6 +146,9 @@ func (m *Manager) error(err error) error {
 // received any proactive message from this inbox, so a visitor is messaged once in total.
 const RepeatVisitor = "visitor"
 
+// Repeats are the repeat rules a campaign may carry; the admin form offers the same list.
+var Repeats = []string{RepeatVisitor, "once", "session", "interval"}
+
 func Suppression(c Campaign, ctx Context, history []Delivery, cooldown time.Duration) string {
 	for _, d := range history {
 		if !d.Displayed && !d.Dismissed && !d.Replied && ctx.Now.Sub(d.CreatedAt) > time.Minute {

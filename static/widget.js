@@ -313,7 +313,7 @@
                 : 'width 0.18s ease, height 0.18s ease, bottom 0.18s ease, border-radius 0.18s ease, box-shadow 0.18s ease';
 
             this.iframe = document.createElement('iframe');
-            this.iframe.src = `${this.config.baseURL}/widget?inbox_id=${encodeURIComponent(this.config.inboxID)}&parent_origin=${encodeURIComponent(window.location.origin)}`;
+            this.iframe.src = this.iframeURL();
             this.iframe.title = 'libredesk';
             this.iframe.style.cssText = `
                 position: fixed;
@@ -329,6 +329,14 @@
 
             document.body.appendChild(this.widgetButtonWrapper);
             document.body.appendChild(this.iframe);
+        }
+
+        iframeURL () {
+            let url = `${this.config.baseURL}/widget?inbox_id=${encodeURIComponent(this.config.inboxID)}&parent_origin=${encodeURIComponent(window.location.origin)}`;
+            if (this.config.locale) {
+                url += `&lang=${encodeURIComponent(this.config.locale)}`;
+            }
+            return url;
         }
 
         sendMobileState () {

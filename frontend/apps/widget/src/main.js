@@ -3,6 +3,7 @@ import { createPinia } from 'pinia'
 import { createI18n } from 'vue-i18n'
 import App from './App.vue'
 import api from './api/index.js'
+import { resolveWidgetLanguage } from './utils/language.js'
 import '@shared-ui/assets/styles/main.scss'
 
 async function initWidget () {
@@ -19,17 +20,22 @@ async function initWidget () {
         const widgetSettingsResponse = await api.getWidgetSettings(inboxID)
         const widgetConfig = widgetSettingsResponse.data.data
 
-        // Resolve language: auto-detect from browser or use admin-configured language.
-        let lang
+        // Resolve language: the host page's locale (`lang` param, set from LibredeskSettings.locale)
+        // wins, then the admin-configured language or browser auto-detection.
+        const requestedLang = urlParams.get('lang') || ''
         const fallbackLang = widgetConfig.fallback_language || 'en-US'
-        if (widgetConfig.language === 'auto') {
-            const browserLang = navigator.language || navigator.languages?.[0] || ''
+        let availableCodes = []
+        if (requestedLang || widgetConfig.language === 'auto') {
             const availableResp = await api.getAvailableLanguages()
-            const availableCodes = availableResp.data.data.map(l => l.code)
-            lang = availableCodes.includes(browserLang) ? browserLang : fallbackLang
-        } else {
-            lang = widgetConfig.language || fallbackLang
+            availableCodes = availableResp.data.data.map(l => l.code)
         }
+        const lang = resolveWidgetLanguage({
+            requested: requestedLang,
+            configured: widgetConfig.language,
+            fallback: fallbackLang,
+            browserLang: navigator.language || navigator.languages?.[0] || '',
+            availableCodes
+        })
 
         // Fetch language messages
         const langMessages = await api.getLanguage(lang)

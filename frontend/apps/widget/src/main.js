@@ -3,7 +3,7 @@ import { createPinia } from 'pinia'
 import { createI18n } from 'vue-i18n'
 import App from './App.vue'
 import api from './api/index.js'
-import { resolveWidgetLanguage } from './utils/language.js'
+import { resolveWidgetLanguage, localizeWidgetConfig } from './utils/language.js'
 import '@shared-ui/assets/styles/main.scss'
 
 async function initWidget () {
@@ -57,7 +57,7 @@ async function initWidget () {
         app.use(pinia)
         app.use(i18n)
         // Store widget config globally for access in App.vue
-        app.config.globalProperties.$widgetConfig = widgetConfig
+        app.config.globalProperties.$widgetConfig = localizeWidgetConfig(widgetConfig, lang)
         app.mount('#app')
     } catch (error) {
         console.error('Error initializing widget:', error)

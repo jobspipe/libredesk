@@ -304,7 +304,7 @@ const props = defineProps({
 })
 
 const emit = defineEmits(['submit'])
-const { t } = useI18n()
+const { t, locale } = useI18n()
 const widgetStore = useWidgetStore()
 const chat = useChatStore()
 const userStore = useUserStore()

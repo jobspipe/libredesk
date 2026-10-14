@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest'
-import { matchLanguage, resolveWidgetLanguage } from './language.js'
+import { matchLanguage, resolveWidgetLanguage, pickLocalizedText, localizeWidgetConfig } from './language.js'
 
 const available = ['da-DK', 'de-DE', 'en-US', 'fr-FR', 'pt-BR', 'pt-PT']
 
@@ -60,5 +60,29 @@ describe('resolveWidgetLanguage', () => {
 
   test('an unavailable page locale is ignored', () => {
     expect(resolveWidgetLanguage({ requested: 'ja', configured: 'de-DE', fallback: 'en-US', availableCodes: available })).toBe('de-DE')
+  })
+})
+
+describe('pickLocalizedText', () => {
+  test('returns plain text unchanged', () => {
+    expect(pickLocalizedText('How can we help?', 'fr-FR')).toBe('How can we help?')
+  })
+  test('picks the French half for a French widget', () => {
+    expect(pickLocalizedText('How can we help? || Comment pouvons-nous vous aider ?', 'fr-FR')).toBe('Comment pouvons-nous vous aider ?')
+    expect(pickLocalizedText('Hi || Salut', 'fr')).toBe('Salut')
+  })
+  test('picks the first half for any other language', () => {
+    expect(pickLocalizedText('How can we help? || Comment pouvons-nous vous aider ?', 'en-US')).toBe('How can we help?')
+  })
+  test('handles empty values', () => {
+    expect(pickLocalizedText('', 'fr-FR')).toBe('')
+    expect(pickLocalizedText(undefined, 'fr-FR')).toBe(undefined)
+  })
+})
+
+describe('localizeWidgetConfig', () => {
+  test('localizes the visitor-facing text fields only', () => {
+    const config = { greeting_message: 'Hello || Bonjour', introduction_message: 'Help? || Aide ?', chat_introduction: 'Ask || Demandez', language: 'auto' }
+    expect(localizeWidgetConfig(config, 'fr-FR')).toEqual({ greeting_message: 'Bonjour', introduction_message: 'Aide ?', chat_introduction: 'Demandez', language: 'auto' })
   })
 })

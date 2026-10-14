@@ -20,3 +20,23 @@ export function resolveWidgetLanguage ({ requested, configured, fallback, browse
   if (configured === 'auto') return matchLanguage(browserLang, availableCodes) || fallback
   return configured || fallback
 }
+
+// Admin text fields can hold "English || Français": the widget shows the half
+// matching its language. Text without the separator is shown as is.
+const TEXT_SEPARATOR = '||'
+const LOCALIZED_FIELDS = ['greeting_message', 'introduction_message', 'chat_introduction']
+
+export function pickLocalizedText (text, lang) {
+  if (typeof text !== 'string' || !text.includes(TEXT_SEPARATOR)) return text
+  const [first, second] = text.split(TEXT_SEPARATOR).map(part => part.trim())
+  const base = String(lang || '').toLowerCase().split(/[-_]/)[0]
+  return base === 'fr' && second ? second : first
+}
+
+export function localizeWidgetConfig (config, lang) {
+  const localized = { ...config }
+  for (const field of LOCALIZED_FIELDS) {
+    if (field in localized) localized[field] = pickLocalizedText(localized[field], lang)
+  }
+  return localized
+}

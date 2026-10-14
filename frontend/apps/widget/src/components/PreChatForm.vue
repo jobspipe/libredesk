@@ -285,6 +285,7 @@ import { useChatStore } from '@widget/store/chat.js'
 import { useUserStore } from '@widget/store/user.js'
 import { resolvePreChatForm } from '@widget/utils/preChatForm.js'
 import { useI18n } from 'vue-i18n'
+import { localizeWidgetConfig } from '../utils/language.js'
 import { createPreChatFormSchema } from './preChatFormSchema.js'
 import api from '@widget/api/index.js'
 
@@ -440,7 +441,7 @@ const refreshSettings = async () => {
   try {
     const inboxID = new URLSearchParams(window.location.search).get('inbox_id')
     const resp = await api.getWidgetSettings(inboxID)
-    widgetStore.updateConfig(resp.data.data)
+    widgetStore.updateConfig(localizeWidgetConfig(resp.data.data, locale.value))
   } catch (error) {
     console.error('Error refreshing widget settings:', error)
   }

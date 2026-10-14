@@ -38,5 +38,17 @@ export function localizeWidgetConfig (config, lang) {
   for (const field of LOCALIZED_FIELDS) {
     if (field in localized) localized[field] = pickLocalizedText(localized[field], lang)
   }
+  if (Array.isArray(localized.home_apps)) {
+    localized.home_apps = localized.home_apps.map(item => localizeItem(item, lang))
+  }
   return localized
+}
+
+function localizeItem (item, lang) {
+  if (!item || typeof item !== 'object') return item
+  const out = {}
+  for (const [key, value] of Object.entries(item)) {
+    out[key] = key === 'type' ? value : pickLocalizedText(value, lang)
+  }
+  return out
 }

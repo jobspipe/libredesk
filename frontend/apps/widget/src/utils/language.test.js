@@ -86,3 +86,11 @@ describe('localizeWidgetConfig', () => {
     expect(localizeWidgetConfig(config, 'fr-FR')).toEqual({ greeting_message: 'Bonjour', introduction_message: 'Aide ?', chat_introduction: 'Demandez', language: 'auto' })
   })
 })
+
+describe('localizeWidgetConfig home apps', () => {
+  test('localizes the text and url of each home item, leaving type alone', () => {
+    const config = { home_apps: [{ type: 'external_link', text: 'Book a call || Réserver un appel', url: 'https://x.com/book || https://x.com/fr/reserver' }, { type: 'help' }] }
+    expect(localizeWidgetConfig(config, 'fr-FR').home_apps).toEqual([{ type: 'external_link', text: 'Réserver un appel', url: 'https://x.com/fr/reserver' }, { type: 'help' }])
+    expect(localizeWidgetConfig(config, 'en-US').home_apps[0]).toEqual({ type: 'external_link', text: 'Book a call', url: 'https://x.com/book' })
+  })
+})

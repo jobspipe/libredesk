@@ -123,6 +123,13 @@
                 {{ getMessageTime(message.created_at) }}
               </span>
 
+              <span v-else-if="message.author.type === 'ai_assistant'" class="flex items-center gap-1">
+                {{ message.author.first_name }}
+                <AIAgentTag />
+                •
+                {{ getMessageTime(message.created_at) }}
+              </span>
+
               <span
                 v-else-if="message.author.type === 'contact' || message.author.type === 'visitor'"
                 class="flex items-center gap-1"
@@ -183,6 +190,7 @@ import MessageAttachment from './MessageAttachment.vue'
 import CSATMessageBubble from './CSATMessageBubble.vue'
 import PreChatForm from './PreChatForm.vue'
 import ReplyButtons from './ReplyButtons.vue'
+import AIAgentTag from './AIAgentTag.vue'
 import { TypingIndicator } from '@shared-ui/components/TypingIndicator'
 import { Spinner } from '@shared-ui/components/ui/spinner'
 import { containsQuoteMarkers } from '@shared-ui/utils/quotedContent.js'

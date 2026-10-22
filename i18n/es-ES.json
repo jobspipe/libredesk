@@ -633,6 +633,7 @@
   "globals.terms.automation": "Automatización | Automatizaciones",
   "globals.terms.availabilityStatus": "Estado de disponibilidad",
   "globals.terms.awaitingResponse": "Esperando respuesta",
+  "globals.terms.aiAgent": "AI Agent",
   "globals.terms.away": "Ausente | Ausente",
   "globals.terms.awayReassigning": "Ausente y reasignando",
   "globals.terms.background": "Fondo",

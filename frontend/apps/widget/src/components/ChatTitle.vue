@@ -5,8 +5,9 @@
       <AvatarFallback>{{ chatTitle.avatarFallback }}</AvatarFallback>
     </Avatar>
     <div class="flex flex-col">
-      <h3 class="text-base font-bold text-foreground">
+      <h3 class="flex items-center gap-1.5 text-base font-bold text-foreground">
         {{ chatTitle.name }}
+        <AIAgentTag v-if="chatTitle.isAI" />
       </h3>
       <p v-if="chatTitle.expectation" class="text-xs text-muted-foreground">
         {{ chatTitle.expectation }}
@@ -44,6 +45,7 @@ import { useChatStore } from '@widget/store/chat.js'
 import { useWidgetStore } from '@widget/store/widget.js'
 import { computed } from 'vue'
 import { Avatar, AvatarFallback, AvatarImage } from '@shared-ui/components/ui/avatar'
+import AIAgentTag from '@widget/components/AIAgentTag.vue'
 import { getRelativeTime } from '@shared-ui/utils/datetime.js'
 import { useBusinessHours } from '@widget/composables/useBusinessHours.js'
 import { useI18n } from 'vue-i18n'
@@ -128,6 +130,7 @@ const chatTitle = computed(() => {
       avatarFallback: assignee.first_name.charAt(0).toUpperCase(),
       availability_status: displayStatus(assignee.availability_status),
       expectation: assignee.expectation || '',
+      isAI: assignee.type === 'ai_assistant',
       hasAssignee: true
     }
   }

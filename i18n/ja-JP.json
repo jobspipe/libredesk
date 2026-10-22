@@ -618,6 +618,7 @@
   "globals.terms.automation": "自動化 | 自動化",
   "globals.terms.availabilityStatus": "対応状況",
   "globals.terms.awaitingResponse": "回答待ち",
+  "globals.terms.aiAgent": "AI Agent",
   "globals.terms.away": "離席中 | 離席中",
   "globals.terms.awayReassigning": "離席と再割り当て",
   "globals.terms.background": "背景",

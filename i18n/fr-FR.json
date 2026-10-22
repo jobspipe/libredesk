@@ -928,6 +928,7 @@
   "globals.terms.automation": "Automatisation | Automatisations",
   "globals.terms.availabilityStatus": "État de disponibilité",
   "globals.terms.awaitingResponse": "En attente de réponse",
+  "globals.terms.aiAgent": "AI Agent",
   "globals.terms.away": "Absent | Absent",
   "globals.terms.awayReassigning": "Absent et réaffectant",
   "globals.terms.background": "Arrière-plan",

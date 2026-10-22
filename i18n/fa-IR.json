@@ -620,6 +620,7 @@
   "globals.terms.automation": "اتوماسیون | اتوماسیون‌ها",
   "globals.terms.availabilityStatus": "وضعیت در دسترس بودن",
   "globals.terms.awaitingResponse": "در انتظار پاسخ",
+  "globals.terms.aiAgent": "AI Agent",
   "globals.terms.away": "خارج از دسترس | خارج از دسترس",
   "globals.terms.awayReassigning": "غایب و در حال تخصیص مجدد",
   "globals.terms.background": "پس‌زمینه",

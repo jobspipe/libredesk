@@ -1083,6 +1083,7 @@
   "globals.terms.automation": "Automation | Automations",
   "globals.terms.availabilityStatus": "Availability status",
   "globals.terms.awaitingResponse": "Awaiting Response",
+  "globals.terms.aiAgent": "AI Agent",
   "globals.terms.away": "Away | Away",
   "globals.terms.awayReassigning": "Away and reassigning",
   "globals.terms.background": "Background",

@@ -670,6 +670,7 @@
   "globals.terms.automation": "自动化 | 自动化",
   "globals.terms.availabilityStatus": "可用性状态",
   "globals.terms.awaitingResponse": "等待回复",
+  "globals.terms.aiAgent": "AI Agent",
   "globals.terms.away": "离开 | 离开",
   "globals.terms.awayReassigning": "离开并重新分配",
   "globals.terms.background": "背景",

@@ -619,6 +619,7 @@
   "globals.terms.automation": "Automatisering | Automatiseringer",
   "globals.terms.availabilityStatus": "Tilgængelighedsstatus",
   "globals.terms.awaitingResponse": "Afventer svar",
+  "globals.terms.aiAgent": "AI Agent",
   "globals.terms.away": "Væk | Væk",
   "globals.terms.awayReassigning": "Væk og gentildeling",
   "globals.terms.background": "Baggrund",

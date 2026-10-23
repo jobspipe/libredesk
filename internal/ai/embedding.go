@@ -170,7 +170,11 @@ func (m *Manager) Reindex(sourceType string, sourceID int, title, htmlContent st
 
 // embedSource chunks and embeds content without touching stored state, so it can run before taking reindexMu.
 func (m *Manager) embedSource(ctx context.Context, sourceType string, sourceID int, title, htmlContent string) ([]indexedChunk, error) {
-	rawChunks, err := stringutil.ChunkHTMLContent(title, htmlContent, m.chunkCfg)
+	cfg := m.chunkCfg
+	if pc, err := m.getProviderConfig(models.ProviderTypeEmbedding); err == nil {
+		cfg = chunkConfigForLimit(cfg, embeddingTokenLimit(pc))
+	}
+	rawChunks, err := stringutil.ChunkHTMLContent(title, htmlContent, cfg)
 	if err != nil {
 		m.lo.Error("error chunking content for embedding", "error", err, "source_type", sourceType, "source_id", sourceID)
 		return nil, err
@@ -368,4 +372,18 @@ func norm(a []float32) float32 {
 		sum += v * v
 	}
 	return float32(math.Sqrt(float64(sum)))
+}
+
+// chunkConfigForLimit shrinks chunks to fit the embedding model's input. A chunk longer than the
+// model's limit is truncated before embedding, so everything past the cut is never searchable;
+// 80% leaves room for the title the chunker prepends and for tokenizer differences.
+func chunkConfigForLimit(cfg stringutil.ChunkConfig, limit int) stringutil.ChunkConfig {
+	maxTokens := limit * 4 / 5
+	if maxTokens <= 0 || maxTokens >= cfg.MaxTokens {
+		return cfg
+	}
+	cfg.MaxTokens = maxTokens
+	cfg.MinTokens = min(cfg.MinTokens, maxTokens/4)
+	cfg.OverlapTokens = min(cfg.OverlapTokens, cfg.MinTokens/2)
+	return cfg
 }

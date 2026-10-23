@@ -1,8 +1,11 @@
 package aiagent
 
 import (
+	"encoding/json"
 	"fmt"
+	"net/url"
 	"strings"
+	"time"
 
 	"github.com/abhinavxd/libredesk/internal/aiagent/models"
 	cmodels "github.com/abhinavxd/libredesk/internal/conversation/models"
@@ -191,4 +194,60 @@ func BuildCopilotPersona(a models.Assistant) string {
 		parts = append(parts, "Instructions from the workspace admin (follow these):\n"+instr)
 	}
 	return strings.Join(parts, "\n\n")
+}
+
+// pageVisitKeyPrefix is the Redis list the widget websocket writes page views to (cmd/widget_ws.go),
+// newest first, one JSON object {url, title, time} per entry, keyed by contact id.
+const pageVisitKeyPrefix = "page_visits:"
+
+// maxPageVisitLines caps how much of the trail reaches the model: the last few pages say what the
+// visitor is weighing; twenty would mostly be navigation.
+const maxPageVisitLines = 8
+
+// pageVisitLines turns the stored page trail into customer-context lines. Query strings and
+// fragments are dropped: they carry tracking ids and tokens, not intent.
+func pageVisitLines(entries []string, now time.Time) []string {
+	var lines []string
+	for _, raw := range entries {
+		if len(lines) == maxPageVisitLines {
+			break
+		}
+		var visit struct {
+			URL   string `json:"url"`
+			Title string `json:"title"`
+			Time  string `json:"time"`
+		}
+		if json.Unmarshal([]byte(raw), &visit) != nil {
+			continue
+		}
+		u, err := url.Parse(visit.URL)
+		if err != nil || u.Host == "" {
+			continue
+		}
+		page := u.Host + u.EscapedPath()
+		if title := strings.TrimSpace(visit.Title); title != "" {
+			page = title + " (" + page + ")"
+		}
+		if at, err := time.Parse(time.RFC3339, visit.Time); err == nil {
+			page += ", " + agoText(now.Sub(at))
+		}
+		lines = append(lines, "  - "+page)
+	}
+	if len(lines) == 0 {
+		return nil
+	}
+	return append([]string{"- Pages viewed on our sites, newest first (the first is where the chat is open):"}, lines...)
+}
+
+func agoText(d time.Duration) string {
+	switch {
+	case d < time.Minute:
+		return "just now"
+	case d < time.Hour:
+		return fmt.Sprintf("%d min ago", int(d.Minutes()))
+	case d < 24*time.Hour:
+		return fmt.Sprintf("%d h ago", int(d.Hours()))
+	default:
+		return fmt.Sprintf("%d d ago", int(d.Hours()/24))
+	}
 }

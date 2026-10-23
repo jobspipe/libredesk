@@ -272,7 +272,8 @@ func (m *Manager) handle(ctx context.Context, convID int) {
 	history := m.buildHistory(msgs, conv.ContactID)
 	// Keep customer-controlled data (contact fields, subject, attributes) out of the system prompt; it
 	// stays in a user-role block so it ranks below the assistant's instructions, not beside them.
-	if block := customerContextBlock(conv, contactLines); block != "" {
+	contextLines := append(contactLines, m.pageVisitLines(conv.ContactID)...)
+	if block := customerContextBlock(conv, contextLines); block != "" {
 		history = append([]aimodels.ChatMessage{{Role: aimodels.RoleUser, Content: block}}, history...)
 	}
 	m.lo.Debug("ai agent running", "conversation_uuid", conv.UUID, "history_messages", len(history), "turns", turns)
@@ -840,4 +841,20 @@ func messageMetaBool(raw json.RawMessage, key string) bool {
 	}
 	value, _ := meta[key].(bool)
 	return value
+}
+
+// pageVisitLines reads the contact's recent page views so the assistant can answer about the page
+// the visitor is on. A Redis failure only costs that context, never the reply.
+func (m *Manager) pageVisitLines(contactID int) []string {
+	if m.redis == nil {
+		return nil
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	entries, err := m.redis.LRange(ctx, fmt.Sprintf("%s%d", pageVisitKeyPrefix, contactID), 0, maxPageVisitLines-1).Result()
+	if err != nil {
+		m.lo.Warn("error reading page visits for ai context", "contact_id", contactID, "error", err)
+		return nil
+	}
+	return pageVisitLines(entries, time.Now())
 }

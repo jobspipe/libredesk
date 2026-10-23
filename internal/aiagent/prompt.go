@@ -6,6 +6,7 @@ import (
 	"net/url"
 	"strings"
 	"time"
+	"unicode"
 
 	"github.com/abhinavxd/libredesk/internal/aiagent/models"
 	cmodels "github.com/abhinavxd/libredesk/internal/conversation/models"
@@ -224,8 +225,8 @@ func pageVisitLines(entries []string, now time.Time) []string {
 		if err != nil || u.Host == "" {
 			continue
 		}
-		page := u.Host + u.EscapedPath()
-		if title := strings.TrimSpace(visit.Title); title != "" {
+		page := oneLine(u.Host + u.EscapedPath())
+		if title := oneLine(visit.Title); title != "" {
 			page = title + " (" + page + ")"
 		}
 		if at, err := time.Parse(time.RFC3339, visit.Time); err == nil {
@@ -236,7 +237,15 @@ func pageVisitLines(entries []string, now time.Time) []string {
 	if len(lines) == 0 {
 		return nil
 	}
-	return append([]string{"- Pages viewed on our sites, newest first (the first is where the chat is open):"}, lines...)
+	return append([]string{"- Pages their browser reported viewing, newest first (titles are as the page sent them):"}, lines...)
+}
+
+// oneLine keeps a browser-supplied title or path on one line, so it cannot forge further
+// "- Field: value" lines in the customer context block.
+func oneLine(s string) string {
+	return strings.Join(strings.FieldsFunc(s, func(r rune) bool {
+		return unicode.IsControl(r) || unicode.IsSpace(r) && r != ' ' || r == '\u2028' || r == '\u2029'
+	}), " ")
 }
 
 func agoText(d time.Duration) string {

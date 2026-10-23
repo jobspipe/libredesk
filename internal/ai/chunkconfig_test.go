@@ -18,6 +18,13 @@ func TestChunkConfigForLimit(t *testing.T) {
 		t.Errorf("shrunk config rejected by the chunker: %v", err)
 	}
 
+	// A tiny limit must never produce a config the chunker rejects.
+	for _, limit := range []int{1, 2, 4, 9, 40} {
+		if _, err := stringutil.ChunkHTMLContent("t", "<p>hello</p>", chunkConfigForLimit(def, limit)); err != nil {
+			t.Errorf("limit %d: chunker rejected the config: %v", limit, err)
+		}
+	}
+
 	// A large-context model keeps the defaults.
 	if got := chunkConfigForLimit(def, 8192); got.MaxTokens != def.MaxTokens || got.MinTokens != def.MinTokens {
 		t.Errorf("8192 changed the defaults: %+v", got)

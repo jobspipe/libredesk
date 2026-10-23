@@ -382,6 +382,10 @@ func chunkConfigForLimit(cfg stringutil.ChunkConfig, limit int) stringutil.Chunk
 	if maxTokens <= 0 || maxTokens >= cfg.MaxTokens {
 		return cfg
 	}
+	if maxTokens < 8 {
+		// Too small to chunk sensibly; a config the chunker rejects would fail every article.
+		return cfg
+	}
 	cfg.MaxTokens = maxTokens
 	cfg.MinTokens = min(cfg.MinTokens, maxTokens/4)
 	cfg.OverlapTokens = min(cfg.OverlapTokens, cfg.MinTokens/2)

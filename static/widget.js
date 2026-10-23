@@ -79,6 +79,7 @@
         }
 
         dropCampaign (id) {
+            this.stopTitleFlash();
             this.campaignData = null;
             this.postToIframe({ type: 'CAMPAIGN_EVENT', event: 'dropped', id });
         }
@@ -481,6 +482,7 @@
                     else this.dropCampaign(event.data.delivery.id);
                     break;
                 case 'CLEAR_CAMPAIGN':
+                    this.stopTitleFlash();
                     this.campaignData = null;
                     this.renderPreviews();
                     break;
@@ -896,7 +898,10 @@
                 elapsed = 0;
                 gap = asked ? Math.min(gap * 2, this.CAMPAIGN_POLL_MAX) : this.CAMPAIGN_POLL_MIN;
                 asked = true;
-                this.postToIframe({ type: 'CAMPAIGN_CONTEXT', context: { url: location.href, mobile: this.isMobile, active_seconds: Math.floor(this.campaignActiveSeconds), event: this.campaignEvent, ...this.campaignPageContext() } });
+                // Exit intent rides on this one poll only; the page's own event stays for the rest.
+                const event = this.campaignExitIntent ? 'exit_intent' : this.campaignEvent;
+                this.campaignExitIntent = false;
+                this.postToIframe({ type: 'CAMPAIGN_CONTEXT', context: { url: location.href, mobile: this.isMobile, active_seconds: Math.floor(this.campaignActiveSeconds), event, ...this.campaignPageContext() } });
             }, 1000);
             // Exit intent: on desktop, the pointer leaving through the top edge means they are heading
             // for the tabs or the address bar. Ask once per page, right away, instead of at the delay.
@@ -904,7 +909,7 @@
                 if (this.isMobile || e.relatedTarget || e.clientY > 0 || this.exitIntentFired) return;
                 if (this.campaignData || this.isChatVisible || this.campaignActiveSeconds < 3) return;
                 this.exitIntentFired = true;
-                this.campaignEvent = 'exit_intent';
+                this.campaignExitIntent = true;
                 this.campaignPollNow = true;
             });
             // A bubble left unread when they switch tabs: flash the tab title until they come back.
@@ -936,9 +941,12 @@
             const original = document.title;
             const sender = this.campaignData?.snapshot?.sender || 'New message';
             const alert = `(1) ${sender} sent you a message`;
-            this.titleFlash = { original, alert, timer: setInterval(() => {
-                document.title = document.title === alert ? original : alert;
+            const flash = { original, alert, timer: setInterval(() => {
+                // The page may retitle itself meanwhile (a route change, data loading): follow it.
+                if (document.title !== flash.alert && document.title !== flash.original) flash.original = document.title;
+                document.title = document.title === flash.alert ? flash.original : flash.alert;
             }, 2000) };
+            this.titleFlash = flash;
             document.title = alert;
         }
 

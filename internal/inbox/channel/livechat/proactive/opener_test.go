@@ -49,6 +49,11 @@ func TestCleanOpener(t *testing.T) {
 		"Visit https://evil.example to claim",
 		"Ask for a discount here?",
 		"<script>alert(1)</script>",
+		"Email hr@acme-careers.co to apply faster?",
+		"Apply at acme-careers.co before anyone else?",
+		"Call us on +1 (415) 555-0100 today?",
+		"Sure, here is a message: want job alerts?",
+		"Plans from 49 USD a month?",
 		strings.Repeat("long ", 40),
 	} {
 		if got, ok := CleanOpener(bad); ok {

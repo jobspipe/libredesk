@@ -15,6 +15,7 @@ import (
 	"github.com/abhinavxd/libredesk/internal/inbox/channel/livechat/proactive"
 	umodels "github.com/abhinavxd/libredesk/internal/user/models"
 	"github.com/google/uuid"
+	"github.com/redis/go-redis/v9"
 	"github.com/zerodha/fastglue"
 )
 
@@ -108,6 +109,7 @@ func handleWidgetCampaign(r *fastglue.Request) error {
 		snapshot := chosen.snapshot
 		snapshot.Variant = proactive.VariantStatic
 		if proactive.UseAIOpener(chosen.campaign, ctx.BrowserKey) {
+			snapshot.Variant = proactive.VariantAIFailed
 			if line, ok := campaignOpener(app, chosen.campaign, ctx); ok {
 				snapshot.Message = line
 				snapshot.Variant = proactive.VariantAI
@@ -145,30 +147,67 @@ func reserveCampaign(app *App, inboxID int, ctx proactive.Context, candidates []
 	return nil, proactive.Delivery{}, nil
 }
 
-// campaignOpener asks the model for a one-line opener written for the visitor's page. Lines are
-// cached per page section for a day, including rejected ones (as ""), so a page costs one call a
-// day; a timeout or provider error is not cached and the visitor gets the fixed text.
+// campaignOpener asks the model for a one-line opener written for the visitor's page. A good line
+// is cached per page section for a day; a rejected one for an hour (as ""), so a bad output does not
+// pin a page to the fixed text all day. Any Redis trouble, the daily call cap, a timeout or a
+// provider error means the fixed text: spend never depends on Redis being healthy.
 func campaignOpener(app *App, c proactive.Campaign, ctx proactive.Context) (string, bool) {
 	key := proactive.OpenerCacheKey(c, ctx)
-	rctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
-	defer cancel()
-	if cached, err := app.redis.Get(rctx, key).Result(); err == nil {
+	gctx, gcancel := context.WithTimeout(context.Background(), 300*time.Millisecond)
+	cached, err := app.redis.Get(gctx, key).Result()
+	gcancel()
+	switch {
+	case err == nil:
 		return cached, cached != ""
+	case !errors.Is(err, redis.Nil):
+		app.lo.Warn("campaign opener cache unavailable, using the fixed text", "error", err)
+		return "", false
 	}
+	if !campaignOpenerBudget(app) {
+		return "", false
+	}
+	mctx, mcancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer mcancel()
 	system, user := proactive.OpenerPrompt(c, ctx)
-	raw, err := app.ai.CompletionRaw(rctx, system, user)
+	raw, err := app.ai.CompletionRaw(mctx, system, user)
 	if err != nil {
 		app.lo.Warn("campaign opener not generated, using the fixed text", "campaign_id", c.ID, "error", err)
 		return "", false
 	}
 	line, ok := proactive.CleanOpener(raw)
+	ttl := 24 * time.Hour
 	if !ok {
 		app.lo.Warn("campaign opener rejected, using the fixed text", "campaign_id", c.ID)
+		ttl = time.Hour
 	}
-	if err := app.redis.Set(context.Background(), key, line, 24*time.Hour).Err(); err != nil {
+	sctx, scancel := context.WithTimeout(context.Background(), 300*time.Millisecond)
+	defer scancel()
+	if err := app.redis.Set(sctx, key, line, ttl).Err(); err != nil {
 		app.lo.Warn("error caching campaign opener", "error", err)
 	}
 	return line, ok
+}
+
+// campaignOpenerBudget counts today's model calls and refuses past proactive.MaxOpenerCallsPerDay.
+func campaignOpenerBudget(app *App) bool {
+	key := "campaign_opener_calls:" + time.Now().UTC().Format("2006-01-02")
+	ctx, cancel := context.WithTimeout(context.Background(), 300*time.Millisecond)
+	defer cancel()
+	n, err := app.redis.Incr(ctx, key).Result()
+	if err != nil {
+		app.lo.Warn("campaign opener budget unavailable, using the fixed text", "error", err)
+		return false
+	}
+	if n == 1 {
+		app.redis.Expire(ctx, key, 48*time.Hour)
+	}
+	if n > proactive.MaxOpenerCallsPerDay {
+		if n == proactive.MaxOpenerCallsPerDay+1 {
+			app.lo.Warn("campaign opener daily cap reached, using the fixed text until tomorrow", "cap", proactive.MaxOpenerCallsPerDay)
+		}
+		return false
+	}
+	return true
 }
 
 func truncateRunes(s string, limit int) string {

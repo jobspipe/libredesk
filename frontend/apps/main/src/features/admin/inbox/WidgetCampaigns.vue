@@ -533,7 +533,12 @@ onMounted(async () => {
             :title="t('widget.campaign.aiOpener')"
             :description="t('widget.campaign.aiOpenerHelp')"
             :checked="!!campaign.ai_opener"
-            @update:checked="update('ai_opener', $event)"
+            @update:checked="
+              (on) => {
+                update('ai_opener', on)
+                if (on && !campaign.ai_share) update('ai_share', 50)
+              }
+            "
           />
           <div v-if="campaign.ai_opener" class="space-y-2">
             <Label for="campaign-ai_share">{{ t('widget.campaign.aiShare') }}</Label>

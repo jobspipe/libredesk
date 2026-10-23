@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"hash/fnv"
 	"net/url"
+	"regexp"
 	"strings"
 	"unicode"
 	"unicode/utf8"
@@ -15,7 +16,14 @@ import (
 const (
 	VariantAI     = "ai"
 	VariantStatic = "static"
+	// VariantAIFailed: in the AI group, but the line could not be used, so the fixed text showed.
+	// Kept apart from VariantStatic so the control group stays clean.
+	VariantAIFailed = "ai_failed"
 )
+
+// MaxOpenerCallsPerDay caps model calls for openers across all campaigns. Anonymous visitors can
+// make the widget ask for a campaign; past the cap everyone gets the fixed text until tomorrow.
+const MaxOpenerCallsPerDay = 1000
 
 const maxOpenerRunes = 160
 
@@ -60,7 +68,14 @@ func OpenerCacheKey(c Campaign, ctx Context) string {
 
 // banned marks output that must never reach a visitor unreviewed: prices, links, markup and
 // commercial promises the fixed offers never make.
-var banned = []string{"$", "€", "£", "%", "http", "www.", "<", ">", "[[", "discount", "coupon", "free trial", "guarantee"}
+var banned = []string{"$", "€", "£", "%", "@", "http", "www.", "<", ">", "[[", "discount", "coupon", "free trial", "guarantee", "percent", "usd", "eur ", "sure,", "here is", "here's a", "certainly"}
+
+// domainLike catches a link without a scheme (acme-careers.co, bit.ly/x) and phoneLike a number
+// worth calling; page text on company pages comes from third parties and must not route visitors.
+var (
+	domainLike = regexp.MustCompile(`[a-z0-9-]\.[a-z]{2,}`)
+	phoneLike  = regexp.MustCompile(`\d[\d\s().-]{6,}\d`)
+)
 
 // CleanOpener returns the model's line ready to show, or false when it should not be used.
 func CleanOpener(raw string) (string, bool) {
@@ -78,6 +93,9 @@ func CleanOpener(raw string) (string, bool) {
 		if strings.Contains(lower, b) {
 			return "", false
 		}
+	}
+	if domainLike.MatchString(lower) || phoneLike.MatchString(line) {
+		return "", false
 	}
 	for _, r := range line {
 		if unicode.IsControl(r) {

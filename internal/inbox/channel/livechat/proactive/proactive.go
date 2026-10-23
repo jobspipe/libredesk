@@ -45,6 +45,9 @@ type queries struct {
 	BindContact *sqlx.Stmt `query:"bind-contact"`
 	Stats       *sqlx.Stmt `query:"stats"`
 	Deliveries  *sqlx.Stmt `query:"deliveries"`
+	// UpdateSnapshot swaps in the AI-written opener after the delivery was reserved with the fixed
+	// text, so the model call never runs under the reservation lock.
+	UpdateSnapshot *sqlx.Stmt `query:"update-snapshot"`
 }
 
 func New(opts Opts) (*Manager, error) {
@@ -83,6 +86,17 @@ func (m *Manager) Reserve(inboxID int, campaign Campaign, ctx Context, snapshot 
 		return Delivery{}, m.error(err)
 	}
 	return delivery, nil
+}
+
+func (m *Manager) UpdateSnapshot(id string, snapshot Snapshot) (json.RawMessage, error) {
+	raw, err := json.Marshal(snapshot)
+	if err != nil {
+		return nil, m.error(err)
+	}
+	if _, err := m.q.UpdateSnapshot.Exec(id, raw); err != nil {
+		return nil, m.error(err)
+	}
+	return raw, nil
 }
 
 func (m *Manager) Get(id string, inboxID int, browserKey string, contactID int) (Delivery, error) {

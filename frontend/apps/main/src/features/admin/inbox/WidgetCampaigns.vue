@@ -528,6 +528,30 @@ onMounted(async () => {
           </p>
         </div>
 
+        <div data-campaign-ai class="space-y-3">
+          <SwitchField
+            :title="t('widget.campaign.aiOpener')"
+            :description="t('widget.campaign.aiOpenerHelp')"
+            :checked="!!campaign.ai_opener"
+            @update:checked="update('ai_opener', $event)"
+          />
+          <div v-if="campaign.ai_opener" class="space-y-2">
+            <Label for="campaign-ai_share">{{ t('widget.campaign.aiShare') }}</Label>
+            <Input
+              id="campaign-ai_share"
+              type="number"
+              min="0"
+              max="100"
+              :model-value="campaign.ai_share ?? 0"
+              @update:model-value="update('ai_share', Number($event))"
+              :aria-invalid="!!campaignFieldError('ai_share')"
+            />
+            <p v-if="campaignFieldError('ai_share')" role="alert" class="text-sm text-destructive">
+              {{ campaignFieldError('ai_share') }}
+            </p>
+          </div>
+        </div>
+
         <div class="grid sm:grid-cols-2 gap-4">
           <div class="space-y-2">
             <Label for="campaign-sender">{{ t('globals.terms.sender') }}</Label>

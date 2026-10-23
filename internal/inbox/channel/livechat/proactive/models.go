@@ -26,6 +26,11 @@ type Campaign struct {
 	Mobile          bool              `json:"mobile"`
 	Repeat          string            `json:"repeat"`
 	RepeatHours     int               `json:"repeat_hours"`
+	// AIOpener lets the AI rewrite Message for the page the visitor is on; Message stays the offer
+	// and the fallback. AIShare is the percentage of browsers that get the AI line (0-100), the rest
+	// the fixed text, so the two can be compared.
+	AIOpener bool `json:"ai_opener"`
+	AIShare  int  `json:"ai_share"`
 }
 
 type Context struct {
@@ -38,6 +43,11 @@ type Context struct {
 	Visitor       bool      `json:"visitor"`
 	Now           time.Time `json:"now"`
 	ContactID     int       `json:"contact_id"`
+	// What the visitor is looking at, as their browser reported it: the page title, the heading of
+	// the section in view and how far down the page they are (0-100). Untrusted text.
+	Title   string `json:"title"`
+	Section string `json:"section"`
+	Scroll  int    `json:"scroll"`
 }
 
 type Delivery struct {
@@ -62,6 +72,9 @@ type Snapshot struct {
 	Avatar   string `json:"avatar"`
 	SenderID int    `json:"sender_id"`
 	TeamID   int    `json:"team_id"`
+	// Variant is "ai" when the AI wrote Message, "static" when an AI-enabled campaign showed its
+	// fixed text, and empty for campaigns without an AI opener.
+	Variant string `json:"variant,omitempty"`
 }
 
 type Stats struct {

@@ -257,13 +257,32 @@ describe('Livechat Inbox Form Schema', () => {
     ])
   })
 
+  test('a campaign may have 40 page patterns in total, as the server allows', () => {
+    const urls = (n, prefix) => Array.from({ length: n }, (_, index) => `/${prefix}-${index}`)
+    const parse = (include, exclude) =>
+      schema.safeParse(
+        withConfig({ campaigns: [{ ...validCampaign, include_urls: include, exclude_urls: exclude }] })
+      )
+    expect(parse(urls(1, 'in'), urls(39, 'out')).success).toBe(true)
+    const tooMany = parse(urls(1, 'in'), urls(40, 'out'))
+    expect(tooMany.success).toBe(false)
+    expect(tooMany.error.issues.map((issue) => issue.message)).toEqual(['widget.campaignUrlLimit {}'])
+  })
+
+  test('the AI opener fields survive a save', () => {
+    const result = schema.safeParse(
+      withConfig({ campaigns: [{ ...validCampaign, ai_opener: true, ai_share: 50 }] })
+    )
+    expect(result.success).toBe(true)
+    expect(result.data.config.campaigns[0]).toMatchObject({ ai_opener: true, ai_share: 50 })
+  })
+
   test('campaign limits use product validation copy', () => {
     const result = schema.safeParse(
       withConfig({
         campaigns: [
           {
             ...validCampaign,
-            include_urls: Array.from({ length: 21 }, (_, index) => `/page-${index}`),
             delay_seconds: -1,
             repeat_hours: 0
           }
@@ -273,7 +292,6 @@ describe('Livechat Inbox Form Schema', () => {
     )
     expect(result.success).toBe(false)
     expect(result.error.issues.map((issue) => issue.message)).toEqual([
-      'widget.campaignUrlLimit {}',
       'validation.minmaxNumber {"min":0,"max":86400}',
       'validation.minmaxNumber {"min":1,"max":8760}',
       'validation.invalidDuration {}'

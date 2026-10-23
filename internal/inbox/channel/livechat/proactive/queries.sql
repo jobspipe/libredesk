@@ -63,3 +63,6 @@ WHERE d.inbox_id = $1 AND d.created_at >= $2 AND d.created_at < $3
   AND ($6 = '' OR POSITION($6 IN d.url) > 0)
 ORDER BY d.created_at DESC, d.id
 LIMIT $7 OFFSET $8;
+
+-- name: update-snapshot
+UPDATE widget_campaign_deliveries SET snapshot = $2 WHERE id = $1;

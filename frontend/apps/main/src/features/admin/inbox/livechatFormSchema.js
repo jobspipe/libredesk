@@ -156,7 +156,9 @@ export const defaultCampaign = () => ({
   desktop: true,
   mobile: true,
   repeat: 'once',
-  repeat_hours: 24
+  repeat_hours: 24,
+  ai_opener: false,
+  ai_share: 0
 })
 export const normalizeAudienceConfig = (config, audience) => {
   const audienceConfig = { ...config?.[audience] }
@@ -198,12 +200,10 @@ export const createCampaignSchema = (t) =>
       audience: z.enum(['all', 'visitors', 'users']),
       include_urls: z
         .array(z.string().max(2048))
-        .transform((items) => items.map((item) => item.trim()).filter(Boolean))
-        .refine((items) => items.length <= 20, t('widget.campaignUrlLimit')),
+        .transform((items) => items.map((item) => item.trim()).filter(Boolean)),
       exclude_urls: z
         .array(z.string().max(2048))
-        .transform((items) => items.map((item) => item.trim()).filter(Boolean))
-        .refine((items) => items.length <= 20, t('widget.campaignUrlLimit')),
+        .transform((items) => items.map((item) => item.trim()).filter(Boolean)),
       conditions: createWidgetConditionsSchema(t),
       event: z.string().max(128),
       delay_seconds: rangeInteger(t, 0, 86400),
@@ -212,9 +212,19 @@ export const createCampaignSchema = (t) =>
       desktop: z.boolean(),
       mobile: z.boolean(),
       repeat: z.enum(['visitor', 'once', 'session', 'interval']),
-      repeat_hours: rangeInteger(t, 1, 8760)
+      repeat_hours: rangeInteger(t, 1, 8760),
+      ai_opener: z.boolean().default(false),
+      ai_share: rangeInteger(t, 0, 100).default(0)
     })
     .superRefine((campaign, ctx) => {
+      // The server's limit: 40 page patterns per campaign, include and exclude together.
+      if (campaign.include_urls.length + campaign.exclude_urls.length > 40) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['exclude_urls'],
+          message: t('widget.campaignUrlLimit')
+        })
+      }
       if (!campaign.desktop && !campaign.mobile) {
         ctx.addIssue({
           code: z.ZodIssueCode.custom,

@@ -41,6 +41,9 @@ func (c Campaign) Validate() error {
 	if c.DelaySeconds < 0 || c.DelaySeconds > 86400 || c.RepeatHours < 1 || c.RepeatHours > 8760 {
 		return fmt.Errorf("delay or repeat interval")
 	}
+	if c.AIShare < 0 || c.AIShare > 100 {
+		return fmt.Errorf("ai_share")
+	}
 	if len(c.Event) > 128 || len(c.IncludeURLs)+len(c.ExcludeURLs) > 40 {
 		return fmt.Errorf("targeting")
 	}
@@ -51,6 +54,12 @@ func (c Campaign) Validate() error {
 	}
 	return ValidateConditions(c.Conditions)
 }
+
+// EventExitIntent is sent by the widget when a desktop pointer leaves through the top of the page.
+// It lets a campaign show before its delay, once the visitor has been on the page a few seconds.
+const EventExitIntent = "exit_intent"
+
+const exitIntentMinSeconds = 3
 
 func (c Campaign) IneligibleReason(ctx Context, conditionsMatch bool, withinHours func() bool) string {
 	switch {
@@ -68,7 +77,7 @@ func (c Campaign) IneligibleReason(ctx Context, conditionsMatch bool, withinHour
 		return "excludedUrl"
 	case c.Event != "" && c.Event != ctx.Event:
 		return "event"
-	case ctx.ActiveSeconds < c.DelaySeconds:
+	case ctx.ActiveSeconds < c.DelaySeconds && !(ctx.Event == EventExitIntent && ctx.ActiveSeconds >= exitIntentMinSeconds):
 		return "delay"
 	case c.BusinessHours == "inside" && !withinHours() || c.BusinessHours == "outside" && withinHours():
 		return "businessHours"

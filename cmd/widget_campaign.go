@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"slices"
@@ -39,6 +40,9 @@ func handleWidgetCampaign(r *fastglue.Request) error {
 	}
 	ctx.Now = time.Now()
 	ctx.Visitor = getWidgetIsVisitor(r)
+	ctx.Title = truncateRunes(ctx.Title, 300)
+	ctx.Section = truncateRunes(ctx.Section, 300)
+	ctx.Scroll = min(max(ctx.Scroll, 0), 100)
 	contact, err := widgetContact(r)
 	if err != nil {
 		return sendErrorEnvelope(r, err)
@@ -92,23 +96,86 @@ func handleWidgetCampaign(r *fastglue.Request) error {
 	if len(candidates) == 0 {
 		return r.SendEnvelope(nil)
 	}
-	unlock := app.proactive.Lock()
-	defer unlock()
-	history, err := app.proactive.History(inbox.ID, ctx)
+	chosen, delivery, err := reserveCampaign(app, inbox.ID, ctx, candidates, cooldown)
 	if err != nil {
 		return sendErrorEnvelope(r, err)
 	}
-	for _, c := range candidates {
+	if chosen == nil {
+		return r.SendEnvelope(nil)
+	}
+	if chosen.campaign.AIOpener {
+		// Outside the reservation lock: the model call must never hold up other visitors.
+		snapshot := chosen.snapshot
+		snapshot.Variant = proactive.VariantStatic
+		if proactive.UseAIOpener(chosen.campaign, ctx.BrowserKey) {
+			if line, ok := campaignOpener(app, chosen.campaign, ctx); ok {
+				snapshot.Message = line
+				snapshot.Variant = proactive.VariantAI
+			}
+		}
+		if raw, err := app.proactive.UpdateSnapshot(delivery.ID, snapshot); err == nil {
+			delivery.Snapshot = raw
+		} else {
+			app.lo.Error("error recording campaign opener", "delivery_id", delivery.ID, "error", err)
+		}
+	}
+	return r.SendEnvelope(delivery)
+}
+
+// reserveCampaign picks the first candidate this visitor has not been suppressed from and reserves
+// a delivery for it, under the proactive lock so two tabs cannot both be messaged.
+func reserveCampaign(app *App, inboxID int, ctx proactive.Context, candidates []campaignCandidate, cooldown time.Duration) (*campaignCandidate, proactive.Delivery, error) {
+	unlock := app.proactive.Lock()
+	defer unlock()
+	history, err := app.proactive.History(inboxID, ctx)
+	if err != nil {
+		return nil, proactive.Delivery{}, err
+	}
+	for i := range candidates {
+		c := &candidates[i]
 		if proactive.Suppression(c.campaign, ctx, history, cooldown) != "" {
 			continue
 		}
-		delivery, err := app.proactive.Reserve(inbox.ID, c.campaign, ctx, c.snapshot)
+		delivery, err := app.proactive.Reserve(inboxID, c.campaign, ctx, c.snapshot)
 		if err != nil {
-			return sendErrorEnvelope(r, err)
+			return nil, proactive.Delivery{}, err
 		}
-		return r.SendEnvelope(delivery)
+		return c, delivery, nil
 	}
-	return r.SendEnvelope(nil)
+	return nil, proactive.Delivery{}, nil
+}
+
+// campaignOpener asks the model for a one-line opener written for the visitor's page. Lines are
+// cached per page section for a day, including rejected ones (as ""), so a page costs one call a
+// day; a timeout or provider error is not cached and the visitor gets the fixed text.
+func campaignOpener(app *App, c proactive.Campaign, ctx proactive.Context) (string, bool) {
+	key := proactive.OpenerCacheKey(c, ctx)
+	rctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	if cached, err := app.redis.Get(rctx, key).Result(); err == nil {
+		return cached, cached != ""
+	}
+	system, user := proactive.OpenerPrompt(c, ctx)
+	raw, err := app.ai.CompletionRaw(rctx, system, user)
+	if err != nil {
+		app.lo.Warn("campaign opener not generated, using the fixed text", "campaign_id", c.ID, "error", err)
+		return "", false
+	}
+	line, ok := proactive.CleanOpener(raw)
+	if !ok {
+		app.lo.Warn("campaign opener rejected, using the fixed text", "campaign_id", c.ID)
+	}
+	if err := app.redis.Set(context.Background(), key, line, 24*time.Hour).Err(); err != nil {
+		app.lo.Warn("error caching campaign opener", "error", err)
+	}
+	return line, ok
+}
+
+func truncateRunes(s string, limit int) string {
+	if r := []rune(s); len(r) > limit {
+		return string(r[:limit])
+	}
+	return s
 }
 
 // handleWidgetCampaignEvent is called by the widget when a campaign message is shown, opened or closed, for the campaign stats.

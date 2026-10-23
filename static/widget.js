@@ -883,6 +883,7 @@
                     this.campaignEvent = '';
                     elapsed = 0;
                     asked = false;
+                    this.exitIntentFired = false;
                     gap = firstGap();
                     if (this.campaignData) this.dropCampaign(this.campaignData.id);
                     this.renderPreviews();
@@ -890,12 +891,62 @@
                 if (document.hidden || this.isChatVisible || this.hideLauncher) return;
                 this.campaignActiveSeconds += delta;
                 elapsed += delta;
-                if (elapsed < gap || this.unreadCount > 0 || this.campaignData) return;
+                if ((elapsed < gap && !this.campaignPollNow) || this.unreadCount > 0 || this.campaignData) return;
+                this.campaignPollNow = false;
                 elapsed = 0;
                 gap = asked ? Math.min(gap * 2, this.CAMPAIGN_POLL_MAX) : this.CAMPAIGN_POLL_MIN;
                 asked = true;
-                this.postToIframe({ type: 'CAMPAIGN_CONTEXT', context: { url: location.href, mobile: this.isMobile, active_seconds: Math.floor(this.campaignActiveSeconds), event: this.campaignEvent } });
+                this.postToIframe({ type: 'CAMPAIGN_CONTEXT', context: { url: location.href, mobile: this.isMobile, active_seconds: Math.floor(this.campaignActiveSeconds), event: this.campaignEvent, ...this.campaignPageContext() } });
             }, 1000);
+            // Exit intent: on desktop, the pointer leaving through the top edge means they are heading
+            // for the tabs or the address bar. Ask once per page, right away, instead of at the delay.
+            document.addEventListener('mouseout', (e) => {
+                if (this.isMobile || e.relatedTarget || e.clientY > 0 || this.exitIntentFired) return;
+                if (this.campaignData || this.isChatVisible || this.campaignActiveSeconds < 3) return;
+                this.exitIntentFired = true;
+                this.campaignEvent = 'exit_intent';
+                this.campaignPollNow = true;
+            });
+            // A bubble left unread when they switch tabs: flash the tab title until they come back.
+            document.addEventListener('visibilitychange', () => {
+                if (document.hidden && this.campaignData && !this.isChatVisible) this.startTitleFlash();
+                else this.stopTitleFlash();
+            });
+        }
+
+        // What the visitor is looking at, for a campaign message written for this page: the title,
+        // the last heading above the middle of the screen, and how far down they are.
+        campaignPageContext () {
+            const doc = document.documentElement;
+            const room = Math.max(1, doc.scrollHeight - window.innerHeight);
+            const scroll = Math.round(Math.min(1, Math.max(0, window.scrollY / room)) * 100);
+            const line = window.innerHeight * 0.4;
+            let section = '';
+            for (const heading of document.querySelectorAll('main h1, main h2, main h3, article h1, article h2, article h3')) {
+                if (!heading.offsetParent) continue;
+                if (heading.getBoundingClientRect().top > line) break;
+                section = heading.textContent || '';
+            }
+            const clean = (text) => text.replace(/\s+/g, ' ').trim().slice(0, 300);
+            return { title: clean(document.title || ''), section: clean(section), scroll };
+        }
+
+        startTitleFlash () {
+            if (this.titleFlash) return;
+            const original = document.title;
+            const sender = this.campaignData?.snapshot?.sender || 'New message';
+            const alert = `(1) ${sender} sent you a message`;
+            this.titleFlash = { original, alert, timer: setInterval(() => {
+                document.title = document.title === alert ? original : alert;
+            }, 2000) };
+            document.title = alert;
+        }
+
+        stopTitleFlash () {
+            if (!this.titleFlash) return;
+            clearInterval(this.titleFlash.timer);
+            if (document.title === this.titleFlash.alert) document.title = this.titleFlash.original;
+            this.titleFlash = null;
         }
 
         trackEvent (name) {
@@ -917,6 +968,7 @@
         }
 
         destroy () {
+            this.stopTitleFlash();
             this.clearPreviews();
             clearInterval(this.campaignInterval);
             this.stopPageTracking();

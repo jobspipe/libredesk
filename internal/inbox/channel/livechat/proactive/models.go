@@ -73,7 +73,8 @@ type Snapshot struct {
 	SenderID int    `json:"sender_id"`
 	TeamID   int    `json:"team_id"`
 	// Variant is "ai" when the AI wrote Message, "static" when an AI-enabled campaign showed its
-	// fixed text, and empty for campaigns without an AI opener.
+	// fixed text to its control group, "ai_pending" or "ai_failed" when the AI group got the fixed
+	// text (no line cached yet, or the line could not be used), and empty without an AI opener.
 	Variant string `json:"variant,omitempty"`
 }
 

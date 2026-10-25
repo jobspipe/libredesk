@@ -37,7 +37,14 @@ export const useProactiveStore = defineStore('proactive', () => {
     const request = generation
     try {
       const response = await api.nextCampaign({ ...context, browser_key: browserKey, session_key: sessionKey })
-      if (request !== generation || !response.data.data || widget.isOpen) return
+      if (request !== generation || widget.isOpen) return
+      if (!response.data.data) {
+        // The server's count of active seconds the nearest campaign still needs, so the loader asks
+        // again then instead of on its backoff schedule.
+        const retryIn = Number(response.headers?.['x-campaign-retry-in'])
+        if (retryIn > 0) postToParent({ type: 'CAMPAIGN_RETRY', seconds: retryIn })
+        return
+      }
       const delivery = response.data.data
       invitation.value = delivery
       postToParent({ type: 'SHOW_CAMPAIGN', delivery })

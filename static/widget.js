@@ -481,6 +481,9 @@
                     if (this.previewHost) this.postToIframe({ type: 'CAMPAIGN_EVENT', event: 'displayed', id: this.campaignData.id });
                     else this.dropCampaign(event.data.delivery.id);
                     break;
+                case 'CAMPAIGN_RETRY':
+                    this.campaignRetryIn = Math.min(Math.max(Number(event.data.seconds) || 0, 0), this.CAMPAIGN_POLL_MAX);
+                    break;
                 case 'CLEAR_CAMPAIGN':
                     this.stopTitleFlash();
                     this.campaignData = null;
@@ -789,7 +792,7 @@
             host.style.setProperty('--muted', data.theme.muted || data.theme.foreground);
             const root = host.attachShadow({ mode: 'open' });
             const style = document.createElement('style');
-            style.textContent = ':host{font:14px/1.45 system-ui,-apple-system,sans-serif;-webkit-font-smoothing:antialiased}button{font:inherit;color:inherit;cursor:pointer;border:0;background:transparent;padding:0}button:focus-visible{outline:2px solid;outline-offset:2px}.stack{display:flex;flex-direction:column;gap:10px;align-items:var(--align)}.card{position:relative;display:flex;max-width:100%;border-radius:18px;box-shadow:0 1px 3px rgba(9,14,21,.12),0 8px 28px rgba(9,14,21,.16);animation:rise .22s ease-out}.open{display:flex;gap:10px;align-items:flex-start;min-width:0;padding:12px 14px;text-align:left;border-radius:inherit}.body{display:flex;flex-direction:column;min-width:0;gap:2px}.name{font-size:12px;line-height:1.3;color:var(--muted)}.text{display:-webkit-box;-webkit-line-clamp:4;-webkit-box-orient:vertical;overflow:hidden;overflow-wrap:anywhere;white-space:pre-line}.text.full{-webkit-line-clamp:12}.meta{font-size:12px;line-height:1.3;color:var(--muted);margin-top:6px}.avatar{flex:none;width:36px;height:36px;border-radius:50%;object-fit:cover}.image{margin-top:6px;max-width:160px;max-height:96px;border-radius:10px;object-fit:cover}.close{position:absolute;top:-8px;inset-inline-end:-8px;width:24px;height:24px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:15px;line-height:1;color:var(--muted);box-shadow:0 1px 3px rgba(9,14,21,.18);opacity:0;transition:opacity .15s}.card:hover .close,.card:focus-within .close{opacity:1}@media(hover:none){.close{opacity:1}}.all{font-size:12px;color:var(--muted);padding:4px 6px;border-radius:6px}.all:hover{text-decoration:underline}@keyframes rise{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}@media(prefers-reduced-motion:reduce){.card{animation:none}}';
+            style.textContent = ':host{font:14px/1.45 system-ui,-apple-system,sans-serif;-webkit-font-smoothing:antialiased}button{font:inherit;color:inherit;cursor:pointer;border:0;background:transparent;padding:0}button:focus-visible{outline:2px solid;outline-offset:2px}.stack{display:flex;flex-direction:column;gap:10px;align-items:var(--align)}.card{position:relative;display:flex;max-width:100%;border-radius:18px;box-shadow:0 1px 3px rgba(9,14,21,.12),0 8px 28px rgba(9,14,21,.16);animation:rise .22s ease-out}.open{display:flex;gap:10px;align-items:flex-start;min-width:0;padding:12px 14px;text-align:left;border-radius:inherit}.body{display:flex;flex-direction:column;min-width:0;gap:2px}.name{font-size:12px;line-height:1.3;color:var(--muted)}.text{display:-webkit-box;-webkit-line-clamp:4;-webkit-box-orient:vertical;overflow:hidden;overflow-wrap:anywhere;white-space:pre-line}.text.full{-webkit-line-clamp:12}.meta{font-size:12px;line-height:1.3;color:var(--muted);margin-top:6px}.avatar{flex:none;width:36px;height:36px;border-radius:50%;object-fit:cover}.image{margin-top:6px;max-width:160px;max-height:96px;border-radius:10px;object-fit:cover}.close{position:absolute;top:-8px;inset-inline-end:-8px;width:24px;height:24px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:15px;line-height:1;color:var(--muted);box-shadow:0 1px 3px rgba(9,14,21,.18);opacity:0;transition:opacity .15s}.card:hover .close,.card:focus-within .close{opacity:1}@media(hover:none){.close{opacity:1}}.all{font-size:12px;color:var(--muted);padding:4px 6px;border-radius:6px}.all:hover{text-decoration:underline}@keyframes rise{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}@media(prefers-reduced-motion:reduce){.card{animation:none}}@media(max-width:600px){.text{-webkit-line-clamp:3}}';
             root.append(style);
             const stack = document.createElement('div');
             stack.className = 'stack';
@@ -893,6 +896,11 @@
                 if (document.hidden || this.isChatVisible || this.hideLauncher) return;
                 this.campaignActiveSeconds += delta;
                 elapsed += delta;
+                // The server said exactly how long the nearest campaign still needs: wait that, not the backoff.
+                if (this.campaignRetryIn) {
+                    gap = Math.max(1, this.campaignRetryIn);
+                    this.campaignRetryIn = 0;
+                }
                 if ((elapsed < gap && !this.campaignPollNow) || this.unreadCount > 0 || this.campaignData) return;
                 this.campaignPollNow = false;
                 elapsed = 0;

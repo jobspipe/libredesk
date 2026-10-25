@@ -32,6 +32,13 @@ type campaignCandidate struct {
 	snapshot proactive.Snapshot
 }
 
+const (
+	// campaignRetryHeader tells the widget how many more active seconds the nearest campaign needs.
+	campaignRetryHeader = "X-Campaign-Retry-In"
+	// openerWarmTimeout bounds the background model call; no visitor waits on it.
+	openerWarmTimeout = 15 * time.Second
+)
+
 // handleWidgetCampaign is called by the widget as the visitor browses the site and returns the campaign message to pop up for this visitor right now, or nothing.
 func handleWidgetCampaign(r *fastglue.Request) error {
 	app := r.Context.(*App)
@@ -69,6 +76,9 @@ func handleWidgetCampaign(r *fastglue.Request) error {
 		return sendErrorEnvelope(r, campaignInputError(app))
 	}
 	var candidates []campaignCandidate
+	// The widget first asks at the earliest delay of any campaign and then backs off; without a hint
+	// a page whose campaign waits longer overshot by up to the backoff step.
+	retryIn := 0
 	for _, campaign := range config.Campaigns {
 		var hoursErr error
 		within := func() bool {
@@ -80,6 +90,11 @@ func handleWidgetCampaign(r *fastglue.Request) error {
 		if hoursErr != nil {
 			app.lo.Warn("skipping campaign with invalid business hours", "campaign_id", campaign.ID, "business_hours_id", campaign.BusinessHoursID)
 			continue
+		}
+		if reason == proactive.ReasonDelay {
+			if left := campaign.DelayLeft(ctx); retryIn == 0 || left < retryIn {
+				retryIn = left
+			}
 		}
 		if reason != "" {
 			continue
@@ -95,6 +110,11 @@ func handleWidgetCampaign(r *fastglue.Request) error {
 		candidates = append(candidates, campaignCandidate{campaign, snapshot})
 	}
 	if len(candidates) == 0 {
+		// A header, not the body: a widget build from before this change ignores it instead of
+		// mistaking the hint for a delivery.
+		if retryIn > 0 {
+			r.RequestCtx.Response.Header.Set(campaignRetryHeader, strconv.Itoa(retryIn))
+		}
 		return r.SendEnvelope(nil)
 	}
 	chosen, delivery, err := reserveCampaign(app, inbox.ID, ctx, candidates, cooldown)
@@ -109,10 +129,10 @@ func handleWidgetCampaign(r *fastglue.Request) error {
 		snapshot := chosen.snapshot
 		snapshot.Variant = proactive.VariantStatic
 		if proactive.UseAIOpener(chosen.campaign, ctx.BrowserKey) {
-			snapshot.Variant = proactive.VariantAIFailed
-			if line, ok := campaignOpener(app, chosen.campaign, ctx); ok {
+			line, variant := campaignOpener(app, chosen.campaign, ctx)
+			snapshot.Variant = variant
+			if variant == proactive.VariantAI {
 				snapshot.Message = line
-				snapshot.Variant = proactive.VariantAI
 			}
 		}
 		if raw, err := app.proactive.UpdateSnapshot(delivery.ID, snapshot); err == nil {
@@ -147,37 +167,50 @@ func reserveCampaign(app *App, inboxID int, ctx proactive.Context, candidates []
 	return nil, proactive.Delivery{}, nil
 }
 
-// campaignOpener asks the model for a one-line opener written for the visitor's page. A good line
-// is cached per page section for a day; a rejected one for an hour (as ""), so a bad output does not
-// pin a page to the fixed text all day. Any Redis trouble, the daily call cap, a timeout or a
-// provider error means the fixed text: spend never depends on Redis being healthy.
-func campaignOpener(app *App, c proactive.Campaign, ctx proactive.Context) (string, bool) {
+// campaignOpener returns the cached AI line for the visitor's page section. It never waits on the
+// model: on a miss the fixed text shows now (VariantAIPending) and the line is written in the
+// background for the next visitor, because a bubble held back for the model call was seen less.
+// Any Redis trouble means the fixed text: spend never depends on Redis being healthy.
+func campaignOpener(app *App, c proactive.Campaign, ctx proactive.Context) (string, string) {
 	key := proactive.OpenerCacheKey(c, ctx)
 	gctx, gcancel := context.WithTimeout(context.Background(), 300*time.Millisecond)
 	cached, err := app.redis.Get(gctx, key).Result()
 	gcancel()
 	switch {
+	case err == nil && cached != "":
+		return cached, proactive.VariantAI
 	case err == nil:
-		return cached, cached != ""
+		return "", proactive.VariantAIFailed
 	case !errors.Is(err, redis.Nil):
 		app.lo.Warn("campaign opener cache unavailable, using the fixed text", "error", err)
-		return "", false
+		return "", proactive.VariantAIFailed
 	}
-	if !campaignOpenerBudget(app) {
-		return "", false
+	go warmCampaignOpener(app, c, ctx, key)
+	return "", proactive.VariantAIPending
+}
+
+// warmCampaignOpener writes the line for one page section. A good line is cached for a day; a
+// rejected one for an hour (as ""), so a bad output does not pin a page to the fixed text all day.
+// The lock keeps a burst of visitors to a new page from each paying for the same call.
+func warmCampaignOpener(app *App, c proactive.Campaign, ctx proactive.Context, key string) {
+	lctx, lcancel := context.WithTimeout(context.Background(), 300*time.Millisecond)
+	locked, err := app.redis.SetNX(lctx, key+":lock", 1, openerWarmTimeout+5*time.Second).Result()
+	lcancel()
+	if err != nil || !locked || !campaignOpenerBudget(app) {
+		return
 	}
-	mctx, mcancel := context.WithTimeout(context.Background(), 3*time.Second)
+	mctx, mcancel := context.WithTimeout(context.Background(), openerWarmTimeout)
 	defer mcancel()
 	system, user := proactive.OpenerPrompt(c, ctx)
 	raw, err := app.ai.CompletionRaw(mctx, system, user)
 	if err != nil {
-		app.lo.Warn("campaign opener not generated, using the fixed text", "campaign_id", c.ID, "error", err)
-		return "", false
+		app.lo.Warn("campaign opener not generated, the fixed text stays", "campaign_id", c.ID, "error", err)
+		return
 	}
 	line, ok := proactive.CleanOpener(raw)
 	ttl := 24 * time.Hour
 	if !ok {
-		app.lo.Warn("campaign opener rejected, using the fixed text", "campaign_id", c.ID)
+		app.lo.Warn("campaign opener rejected, the fixed text stays", "campaign_id", c.ID)
 		ttl = time.Hour
 	}
 	sctx, scancel := context.WithTimeout(context.Background(), 300*time.Millisecond)
@@ -185,7 +218,6 @@ func campaignOpener(app *App, c proactive.Campaign, ctx proactive.Context) (stri
 	if err := app.redis.Set(sctx, key, line, ttl).Err(); err != nil {
 		app.lo.Warn("error caching campaign opener", "error", err)
 	}
-	return line, ok
 }
 
 // campaignOpenerBudget counts today's model calls and refuses past proactive.MaxOpenerCallsPerDay.

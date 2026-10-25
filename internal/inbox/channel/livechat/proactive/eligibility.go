@@ -61,6 +61,14 @@ const EventExitIntent = "exit_intent"
 
 const exitIntentMinSeconds = 3
 
+// ReasonDelay is the IneligibleReason for a campaign whose only wait is its delay.
+const ReasonDelay = "delay"
+
+// DelayLeft is how many more active seconds the visitor needs before the campaign's delay passes.
+func (c Campaign) DelayLeft(ctx Context) int {
+	return max(c.DelaySeconds-ctx.ActiveSeconds, 1)
+}
+
 func (c Campaign) IneligibleReason(ctx Context, conditionsMatch bool, withinHours func() bool) string {
 	switch {
 	case !c.Enabled:
@@ -78,7 +86,7 @@ func (c Campaign) IneligibleReason(ctx Context, conditionsMatch bool, withinHour
 	case c.Event != "" && c.Event != ctx.Event:
 		return "event"
 	case ctx.ActiveSeconds < c.DelaySeconds && !(ctx.Event == EventExitIntent && ctx.ActiveSeconds >= exitIntentMinSeconds):
-		return "delay"
+		return ReasonDelay
 	case c.BusinessHours == "inside" && !withinHours() || c.BusinessHours == "outside" && withinHours():
 		return "businessHours"
 	}

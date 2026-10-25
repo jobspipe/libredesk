@@ -177,3 +177,12 @@ func TestCampaignValidateAcceptsEveryRepeatTheAdminOffers(t *testing.T) {
 		t.Fatalf("got %v, want repeat validation error", err)
 	}
 }
+
+func TestDelayLeft(t *testing.T) {
+	campaign := Campaign{DelaySeconds: 30}
+	for _, tc := range []struct{ active, want int }{{8, 22}, {29, 1}, {30, 1}, {45, 1}} {
+		if got := campaign.DelayLeft(Context{ActiveSeconds: tc.active}); got != tc.want {
+			t.Fatalf("DelayLeft at %ds = %d, want %d", tc.active, got, tc.want)
+		}
+	}
+}

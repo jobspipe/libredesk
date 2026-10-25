@@ -19,6 +19,9 @@ const (
 	// VariantAIFailed: in the AI group, but the line could not be used, so the fixed text showed.
 	// Kept apart from VariantStatic so the control group stays clean.
 	VariantAIFailed = "ai_failed"
+	// VariantAIPending: in the AI group, but no line was cached for the page section yet, so the
+	// fixed text showed while one is written for the next visitor.
+	VariantAIPending = "ai_pending"
 )
 
 // MaxOpenerCallsPerDay caps model calls for openers across all campaigns. Anonymous visitors can

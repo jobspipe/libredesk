@@ -482,6 +482,8 @@
                     else this.dropCampaign(event.data.delivery.id);
                     break;
                 case 'CAMPAIGN_RETRY':
+                    // A hint for a page they already left would hold back the next page's campaign.
+                    if (event.data.url !== location.href) break;
                     this.campaignRetryIn = Math.min(Math.max(Number(event.data.seconds) || 0, 0), this.CAMPAIGN_POLL_MAX);
                     break;
                 case 'CLEAR_CAMPAIGN':
@@ -889,6 +891,7 @@
                     elapsed = 0;
                     asked = false;
                     this.exitIntentFired = false;
+                    this.campaignRetryIn = 0;
                     gap = firstGap();
                     if (this.campaignData) this.dropCampaign(this.campaignData.id);
                     this.renderPreviews();

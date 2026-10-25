@@ -23,7 +23,7 @@ describe('proactive store', () => {
     const store = useProactiveStore()
     store.setBrowserKey('a'.repeat(36))
     await store.next({ url: 'https://example.com/blog' })
-    expect(posted).toEqual([{ type: 'CAMPAIGN_RETRY', seconds: 22 }])
+    expect(posted).toEqual([{ type: 'CAMPAIGN_RETRY', seconds: 22, url: 'https://example.com/blog' }])
   })
 
   it('posts nothing when there is no campaign and no hint', async () => {

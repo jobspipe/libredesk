@@ -42,7 +42,7 @@ export const useProactiveStore = defineStore('proactive', () => {
         // The server's count of active seconds the nearest campaign still needs, so the loader asks
         // again then instead of on its backoff schedule.
         const retryIn = Number(response.headers?.['x-campaign-retry-in'])
-        if (retryIn > 0) postToParent({ type: 'CAMPAIGN_RETRY', seconds: retryIn })
+        if (retryIn > 0) postToParent({ type: 'CAMPAIGN_RETRY', seconds: retryIn, url: context.url })
         return
       }
       const delivery = response.data.data

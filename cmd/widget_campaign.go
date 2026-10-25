@@ -109,12 +109,12 @@ func handleWidgetCampaign(r *fastglue.Request) error {
 		}
 		candidates = append(candidates, campaignCandidate{campaign, snapshot})
 	}
+	// A header, not the body: a widget build from before this change ignores it instead of mistaking
+	// the hint for a delivery. Set before reserving, so it also covers every candidate being suppressed.
+	if retryIn > 0 {
+		r.RequestCtx.Response.Header.Set(campaignRetryHeader, strconv.Itoa(retryIn))
+	}
 	if len(candidates) == 0 {
-		// A header, not the body: a widget build from before this change ignores it instead of
-		// mistaking the hint for a delivery.
-		if retryIn > 0 {
-			r.RequestCtx.Response.Header.Set(campaignRetryHeader, strconv.Itoa(retryIn))
-		}
 		return r.SendEnvelope(nil)
 	}
 	chosen, delivery, err := reserveCampaign(app, inbox.ID, ctx, candidates, cooldown)
@@ -193,6 +193,11 @@ func campaignOpener(app *App, c proactive.Campaign, ctx proactive.Context) (stri
 // rejected one for an hour (as ""), so a bad output does not pin a page to the fixed text all day.
 // The lock keeps a burst of visitors to a new page from each paying for the same call.
 func warmCampaignOpener(app *App, c proactive.Campaign, ctx proactive.Context, key string) {
+	defer func() {
+		if r := recover(); r != nil {
+			app.lo.Error("recovered from panic writing campaign opener", "campaign_id", c.ID, "panic", r)
+		}
+	}()
 	lctx, lcancel := context.WithTimeout(context.Background(), 300*time.Millisecond)
 	locked, err := app.redis.SetNX(lctx, key+":lock", 1, openerWarmTimeout+5*time.Second).Result()
 	lcancel()

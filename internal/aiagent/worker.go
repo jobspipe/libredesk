@@ -43,7 +43,21 @@ const (
 	// combined. The per-call 60s clock (ai.overallRequestTimeout) nests inside it.
 	emailRunTimeout    = 3 * time.Minute
 	livechatRunTimeout = 90 * time.Second
+
+	// wrapUpTurns is how many replies past the turn cap an unverified visitor gets, so the handoff
+	// carries a confirmed email instead of none: ask for it, send the code, check it, one retry.
+	wrapUpTurns = 4
+	// wrapUpIdleTimeout hands off a wrap-up the visitor stopped answering.
+	wrapUpIdleTimeout = 10 * time.Minute
 )
+
+// wrapUpToolNames are the only tools a wrap-up run keeps: collect and confirm an email, then hand off.
+var wrapUpToolNames = map[string]bool{
+	"hand_off_to_human":        true,
+	"set_contact_email":        true,
+	"send_email_verification":  true,
+	"check_email_verification": true,
+}
 
 // nonActionableCategories are status categories the assistant skips; it replies only to open
 // conversations, never waiting (e.g. snoozed) or resolved ones. Keyed by category, not status name,
@@ -259,9 +273,16 @@ func (m *Manager) handle(ctx context.Context, convID int) {
 		m.handoff(conv, assistant, m.i18n.T("ai.agent.handoffError"))
 		return
 	}
+	// At the cap a visitor with no confirmed email would be handed to a person nobody can reply to
+	// once the tab closes, so the assistant first gets a few replies to collect and verify one.
+	needsVerification := m.assistantHasVerifiedTool(assistant)
+	wrapUp := false
 	if turns >= assistant.MaxTurns {
-		m.handoff(conv, assistant, m.i18n.T("ai.agent.handoffMaxTurns"))
-		return
+		wrapUp = withinWrapUp(turns, assistant.MaxTurns) && needsVerification && m.canVerifyBeforeHandoff(conv)
+		if !wrapUp {
+			m.handoff(conv, assistant, m.i18n.T("ai.agent.handoffMaxTurns"))
+			return
+		}
 	}
 
 	contactLines := contactFieldLines(conv.Contact)
@@ -286,12 +307,13 @@ func (m *Manager) handle(ctx context.Context, convID int) {
 	m.lo.Debug("ai agent verification state", "conversation_uuid", conv.UUID, "channel", conv.InboxChannel, "contact_type", conv.Contact.Type, "has_email", conv.Contact.Email.String != "", "verified", runVerified)
 
 	outcome := &runOutcome{}
+	handoff := &handoffTool{m: m, conv: conv, assistant: assistant, outcome: outcome}
 	tools := []ai.Tool{
 		&searchKnowledgeTool{m: m},
 		&resolveTool{m: m, conv: conv, outcome: outcome},
 	}
 	if assistant.HandoffEnabled {
-		tools = append(tools, &handoffTool{m: m, conv: conv, assistant: assistant, outcome: outcome})
+		tools = append(tools, handoff)
 	}
 	if recent := m.recentContactConversations(conv, runVerified); len(recent) > 0 {
 		systemPrompt += fmt.Sprintf("\n\nThis customer has %d other conversation(s) from the last %d days. Call get_previous_conversations if the current issue might be a follow-up or related to them.", len(recent), recentConversationDays)
@@ -302,7 +324,6 @@ func (m *Manager) handle(ctx context.Context, convID int) {
 	// verified: the 30-min window can expire mid-run and a blocked tool then points the model at
 	// them. set_contact_email is visitor-only, so a self-claimed email can be corrected in chat; a
 	// known contact's email is never swappable this way.
-	needsVerification := m.assistantHasVerifiedTool(assistant)
 	if needsVerification && (conv.InboxChannel == channelEmail || conv.Contact.Type != umodels.UserTypeContact) {
 		offerSetEmail := conv.Contact.Type == umodels.UserTypeVisitor
 		tools = append(tools, &sendEmailVerificationTool{m: m, conv: &conv})
@@ -314,6 +335,13 @@ func (m *Manager) handle(ctx context.Context, convID int) {
 	}
 	if needsVerification && !runVerified {
 		systemPrompt += "\n\n" + verificationNote
+	}
+	toolIDs := assistant.ToolIDs
+	if wrapUp {
+		tools = wrapUpTools(tools, handoff)
+		toolIDs = nil
+		systemPrompt += "\n\n" + wrapUpNote
+		m.lo.Debug("ai agent wrapping up before handoff", "conversation_uuid", conv.UUID, "turns", turns)
 	}
 
 	tctx := ai.ToolContext{
@@ -332,7 +360,7 @@ func (m *Manager) handle(ctx context.Context, convID int) {
 	runCtx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 	stopTyping := m.keepTyping(conv.UUID)
-	answer, err := m.ai.RunAgentWithTools(runCtx, systemPrompt, history, m.maxSteps, tctx, assistant.ToolIDs, false, false, tools)
+	answer, err := m.ai.RunAgentWithTools(runCtx, systemPrompt, history, m.maxSteps, tctx, toolIDs, false, false, tools)
 	stopTyping()
 	// A human agent may have taken over or resolved the conversation mid-run; if so, drop this
 	// run's reply and status actions instead of talking over them.
@@ -393,6 +421,10 @@ func (m *Manager) handle(ctx context.Context, convID int) {
 	if answer == "" {
 		m.lo.Debug("ai agent no answer, handing off", "conversation_uuid", conv.UUID)
 		m.handoff(conv, assistant, m.i18n.T("ai.agent.handoffNoAnswer"))
+		return
+	}
+	if wrapUp {
+		m.handOffIfWrapUpStalls(conv.ID, assistant, turns+1)
 	}
 }
 
@@ -716,6 +748,70 @@ func (m *Manager) recentContactConversations(conv cmodels.Conversation, verified
 		return nil
 	}
 	return recent
+}
+
+// withinWrapUp reports whether a run at or past the turn cap still has wrap-up replies left.
+func withinWrapUp(turns, maxTurns int) bool {
+	return turns < maxTurns+wrapUpTurns
+}
+
+// canVerifyBeforeHandoff is true for a live-chat visitor the assistant could still verify by email.
+// Email conversations already have an address, and a signed-in contact needs no code.
+func (m *Manager) canVerifyBeforeHandoff(conv cmodels.Conversation) bool {
+	return conv.InboxChannel != channelEmail &&
+		conv.Contact.Type == umodels.UserTypeVisitor &&
+		!m.isContactVerified(conv)
+}
+
+// handOffIfWrapUpStalls hands the conversation to a person when the visitor stops answering during
+// wrap-up: the old cap always reached the team, and only a new message would otherwise run again.
+// turnsAfter is the turn count this run left; a later run changes it and owns its own timer.
+// Not counted in wg: Close would otherwise wait out the timer. Holding closedMu while it works makes
+// Close wait only for a handoff already under way.
+func (m *Manager) handOffIfWrapUpStalls(convID int, assistant models.Assistant, turnsAfter int) {
+	time.AfterFunc(wrapUpIdleTimeout, func() {
+		defer func() {
+			if r := recover(); r != nil {
+				m.lo.Error("recovered from panic in wrap-up timeout", "conversation_id", convID, "panic", r)
+			}
+		}()
+		m.closedMu.RLock()
+		defer m.closedMu.RUnlock()
+		if m.closed {
+			return
+		}
+		conv, err := m.convo.GetConversation(convID, "", "")
+		if err != nil {
+			m.lo.Error("error fetching conversation for wrap-up timeout", "conversation_id", convID, "error", err)
+			return
+		}
+		if !conv.AssignedUserID.Valid || int(conv.AssignedUserID.Int) != assistant.UserID || nonActionableCategories[conv.StatusCategory.String] {
+			return
+		}
+		var turns int
+		if err := m.q.CountAITurns.Get(&turns, conv.ID, assistant.UserID); err != nil || turns != turnsAfter {
+			return
+		}
+		m.lo.Debug("ai agent wrap-up timed out, handing off", "conversation_uuid", conv.UUID)
+		m.handoff(conv, assistant, m.i18n.T("ai.agent.handoffMaxTurns"))
+	})
+}
+
+// wrapUpTools keeps only the verification tools and adds the handoff tool when the assistant has
+// handoff turned off: at the cap the conversation goes to a person either way.
+func wrapUpTools(tools []ai.Tool, handoff ai.Tool) []ai.Tool {
+	kept := make([]ai.Tool, 0, len(wrapUpToolNames))
+	hasHandoff := false
+	for _, t := range tools {
+		if wrapUpToolNames[t.Name()] {
+			kept = append(kept, t)
+			hasHandoff = hasHandoff || t.Name() == handoff.Name()
+		}
+	}
+	if !hasHandoff {
+		kept = append(kept, handoff)
+	}
+	return kept
 }
 
 // assistantHasVerifiedTool reports whether any tool attached to the assistant is verification-gated;

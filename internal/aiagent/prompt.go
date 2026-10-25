@@ -61,6 +61,13 @@ const verificationNote = `This customer is not verified yet. Some tools need a v
 - Call check_email_verification for every code the customer sends, including after an earlier code was rejected. Never tell them a code is wrong unless that tool just said so.
 Do not claim the customer is verified until check_email_verification has succeeded.`
 
+// wrapUpNote replaces normal answering once the turn cap is reached and the visitor is unverified.
+const wrapUpNote = `This conversation has reached your reply limit and a person from the team is taking over. Do not answer any more questions; say a person will pick them up right here. Before you hand off, make sure the team can reach them by email:
+- If you do not have their email, say a person is taking over and ask for the address they want the reply sent to.
+- When they give it, call set_contact_email, then send_email_verification, and ask them to paste the code here.
+- When they send a code, call check_email_verification.
+- As soon as the code is confirmed, or if they decline or ignore the request for an email, call hand_off_to_human. State in the reason whether the email was confirmed, and tell the customer a person will reply here, and by email too if it was confirmed.`
+
 var toneClauses = map[string]string{
 	"friendly":     "Use a warm, friendly and approachable voice.",
 	"professional": "Use a professional, polished and courteous voice.",
